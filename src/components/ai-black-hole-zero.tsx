@@ -630,9 +630,7 @@ export default function AIBlackHoleZero({
           ? cleanLightColors
           : colors;
 
-    // Light is the same liquid/gravity simulation as Dark with a clean palette.
-    // Chromatic keeps its dedicated opaque, single-colour material treatment.
-    const surfaceMode = theme === "graphite" ? 1 : theme === "chromatic" ? 2 : 0;
+    const surfaceMode = theme === "dark" ? 0 : theme === "graphite" ? 1 : 2;
     const cleanLightSurface = theme === "light" || theme === "chromatic";
 
     const uniforms = {
