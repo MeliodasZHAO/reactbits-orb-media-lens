@@ -40,6 +40,7 @@ const fragmentShader = `
   uniform float uCursorActive;
   uniform float uFusionPass;
   uniform float uLensEnabled;
+  uniform float uCleanLight;
   uniform float uSurfaceMode;
   uniform vec3 uColor1;
   uniform vec3 uColor2;
@@ -353,6 +354,7 @@ const fragmentShader = `
     float alpha = clamp(blobAlpha + orbitAlpha, 0.0, 1.0);
 
     result = pow(max(result, 0.0), vec3(0.95));
+    float sourceAlpha = alpha;
 
     if (uSurfaceMode > 0.5 && uSurfaceMode < 1.5) {
       float sourceLum = brightness(clamp(result, 0.0, 1.0));
@@ -378,7 +380,7 @@ const fragmentShader = `
       result = mix(graphite, coolGraphite, orbitInk * 0.32);
       float lightBodyAlpha = max(alpha, sm * 0.74);
       alpha = mix(alpha * 0.34, lightBodyAlpha, sm);
-    } else if (uSurfaceMode > 1.5) {
+    } else if (uSurfaceMode > 1.5 || uCleanLight > 0.5) {
       float chromaticShape = clamp(
         sm + (n - 0.48) * 0.13 - extraction * 0.08,
         0.0,
@@ -482,7 +484,8 @@ const fragmentShader = `
         0.0,
         0.92
       );
-      alpha = max(chromaticBodyAlpha, chromaticOrbitAlpha);
+      float chromaticAlpha = max(chromaticBodyAlpha, chromaticOrbitAlpha);
+      alpha = mix(chromaticAlpha, sourceAlpha, uCleanLight);
 
       float contentDistance = lensDistance + lensWarp * 0.34;
       float contentContainment = mix(
@@ -532,7 +535,8 @@ const fragmentShader = `
       result += lensColor * pointerCaustic * 0.16;
       result = clamp(result, 0.0, 1.0);
 
-      float containedContentAlpha = alpha * contentContainment;
+      float activeContainment = mix(contentContainment, 1.0, uCleanLight);
+      float containedContentAlpha = alpha * activeContainment;
       alpha = containedContentAlpha;
     }
 
@@ -639,6 +643,7 @@ export default function AIBlackHoleZero({
       uCursorActive: { value: 0 },
       uFusionPass: { value: fusionPass ? 1 : 0 },
       uLensEnabled: { value: lensEnabled ? 1 : 0 },
+      uCleanLight: { value: theme === "light" ? 1 : 0 },
       uSurfaceMode: { value: surfaceMode },
       uColor1: { value: toRgb(palette[0]) },
       uColor2: { value: toRgb(palette[1]) },
