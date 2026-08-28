@@ -153,25 +153,33 @@ const fragmentShader = `
       * clickFade
       * uLensEnabled;
 
+    float fogProgress = 1.0 - exp(-uClickAge * 1.18);
+    float fogScale = 0.62 + fogProgress * 1.08;
     float fogNoise = fractal(
-      fromClick * 1.85 + vec2(time * 0.12, -time * 0.09),
+      fromClick * 1.85 / fogScale + vec2(time * 0.11, -time * 0.075),
       2
     );
-    float fogRadius = uClickAge * 0.62;
-    float fogDistance = clickDistance + (fogNoise - 0.5) * 0.38;
+    float fogRadius = 0.08 + fogProgress * 1.08;
+    float fogSoftness = 0.16 + fogProgress * 0.34;
+    float fogDistance = clickDistance + (fogNoise - 0.5) * (0.2 + fogProgress * 0.28);
     float fogFill = 1.0 - smoothstep(
-      fogRadius - 0.2,
-      fogRadius + 0.18,
+      fogRadius - fogSoftness,
+      fogRadius + fogSoftness,
       fogDistance
+    );
+    float fogBreakup = smoothstep(
+      0.12 + fogProgress * 0.16,
+      0.86,
+      fogNoise + fogFill * 0.28
     );
     float viewportFog = clamp(
       fogFill
-      * (0.42 + fogNoise * 0.72)
-      * exp(-uClickAge * 0.28)
+      * mix(0.48 + fogNoise * 0.68, fogBreakup, fogProgress * 0.72)
+      * exp(-uClickAge * 0.58)
       * smoothstep(0.02, 0.18, uClickAge)
       * uClickActive
       * (1.0 - uLensEnabled)
-      * 1.35,
+      * 1.48,
       0.0,
       1.0
     );
@@ -337,18 +345,44 @@ const fragmentShader = `
     vec3 norm = normalize(vec3(blobUv.x, blobUv.y, 0.7 - d));
     vec3 col = vec3(n * 0.5 + 0.25);
 
-    float a = atan(noisePos.y, noisePos.x) / PI_TWO + time * 0.1;
-    float gradPos = fract(a + mirroredNoise.x * fieldEnergy * 0.035);
-    vec3 gradientColor;
-    if (gradPos < 0.25) {
-      gradientColor = mix(uColor1, uColor2, gradPos * 4.0);
-    } else if (gradPos < 0.5) {
-      gradientColor = mix(uColor2, uColor3, (gradPos - 0.25) * 4.0);
-    } else if (gradPos < 0.75) {
-      gradientColor = mix(uColor3, uColor4, (gradPos - 0.5) * 4.0);
-    } else {
-      gradientColor = mix(uColor4, uColor1, (gradPos - 0.75) * 4.0);
-    }
+    float angularPhase = atan(noisePos.y, noisePos.x) / PI_TWO + time * 0.1;
+    float flowPhase = n * 0.34
+      + nx * 0.27
+      + ny * 0.19
+      + dot(noisePos, vec3(0.17, -0.11, 0.13))
+      + time * 0.035;
+    vec2 angularVector = vec2(
+      cos(angularPhase * PI_TWO),
+      sin(angularPhase * PI_TWO)
+    );
+    vec2 flowVector = vec2(
+      cos(flowPhase * PI_TWO),
+      sin(flowPhase * PI_TWO)
+    );
+    float angularWeight = smoothstep(0.16, 0.58, length(noisePos.xy));
+    vec2 hueVector = normalize(
+      mix(flowVector, angularVector, angularWeight) + vec2(0.0001)
+    );
+    float gradPos = fract(
+      atan(hueVector.y, hueVector.x) / PI_TWO
+      + 1.0
+      + mirroredNoise.x * fieldEnergy * 0.035
+    );
+
+    float colorWeight1 = pow(0.5 + 0.5 * cos(PI_TWO * gradPos), 3.0);
+    float colorWeight2 = pow(0.5 + 0.5 * cos(PI_TWO * (gradPos - 0.25)), 3.0);
+    float colorWeight3 = pow(0.5 + 0.5 * cos(PI_TWO * (gradPos - 0.5)), 3.0);
+    float colorWeight4 = pow(0.5 + 0.5 * cos(PI_TWO * (gradPos - 0.75)), 3.0);
+    float colorWeightSum = max(
+      colorWeight1 + colorWeight2 + colorWeight3 + colorWeight4,
+      0.001
+    );
+    vec3 gradientColor = (
+      uColor1 * colorWeight1
+      + uColor2 * colorWeight2
+      + uColor3 * colorWeight3
+      + uColor4 * colorWeight4
+    ) / colorWeightSum;
 
     col *= gradientColor;
     col *= 2.0 * 1.12 * 1.25;
