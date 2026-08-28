@@ -8,6 +8,7 @@ type AIBlackHoleZeroProps = {
   fusionPass?: boolean;
   lensEnabled?: boolean;
   theme?: "dark" | "light" | "graphite" | "chromatic";
+  chromaticMode?: "mono" | "spectrum";
   color?: string;
   className?: string;
 };
@@ -600,6 +601,7 @@ export default function AIBlackHoleZero({
   fusionPass = true,
   lensEnabled = false,
   theme = "dark",
+  chromaticMode = "mono",
   color = "#6978ff",
   className,
 }: AIBlackHoleZeroProps) {
@@ -633,12 +635,14 @@ export default function AIBlackHoleZero({
     const palette = theme === "graphite"
       ? ["#858b98", "#777685", "#748b91", "#87948f"] as const
       : theme === "chromatic"
-        ? monochromePalette(color)
+        ? chromaticMode === "spectrum"
+          ? cleanLightColors
+          : monochromePalette(color)
         : theme === "light"
           ? cleanLightColors
           : colors;
 
-    const surfaceMode = theme === "dark" ? 0 : theme === "graphite" ? 1 : 2;
+    const surfaceMode = theme === "graphite" ? 1 : theme === "chromatic" ? 2 : 0;
     const cleanLightSurface = theme === "light" || theme === "chromatic";
 
     const uniforms = {
@@ -734,7 +738,7 @@ export default function AIBlackHoleZero({
         container.removeChild(renderer.domElement);
       }
     };
-  }, [color, fusionPass, lensEnabled, paused, theme]);
+  }, [chromaticMode, color, fusionPass, lensEnabled, paused, theme]);
 
   return (
     <div

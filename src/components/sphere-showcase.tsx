@@ -26,6 +26,7 @@ const readReducedMotion = () =>
 
 type Theme = "dark" | "light" | "graphite" | "chromatic";
 type Surface = "viewport" | "orb";
+type ChromaticMode = "mono" | "spectrum";
 
 const themes: Theme[] = ["dark", "light", "graphite", "chromatic"];
 const surfaces: Surface[] = ["viewport", "orb"];
@@ -39,6 +40,7 @@ export default function SphereShowcase() {
   const [theme, setTheme] = useState<Theme>("chromatic");
   const [surface, setSurface] = useState<Surface>("orb");
   const [chromaticColor, setChromaticColor] = useState("#6978ff");
+  const [chromaticMode, setChromaticMode] = useState<ChromaticMode>("mono");
   const light = theme !== "dark";
 
   const frameClass = surface === "viewport"
@@ -63,6 +65,7 @@ export default function SphereShowcase() {
             paused={reducedMotion}
             lensEnabled={surface === "orb"}
             theme={theme}
+            chromaticMode={chromaticMode}
             color={chromaticColor}
             className="absolute inset-0 h-full w-full"
           />
@@ -81,27 +84,49 @@ export default function SphereShowcase() {
 
         <div className="flex max-w-[34rem] flex-wrap justify-end gap-2">
           {theme === "chromatic" && (
-            <label
-              className={`flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 font-mono text-[9px] uppercase tracking-[0.14em] ${
-                light
-                  ? "border-black/10 bg-white/80"
-                  : "border-white/10 bg-black/40"
-              }`}
-            >
-              Color
-              <span
-                className="relative size-5 overflow-hidden rounded-full border border-black/10 shadow-sm"
-                style={{ backgroundColor: chromaticColor }}
+            <div className="flex items-center gap-2">
+              <div
+                className={`flex rounded-full border p-1 ${
+                  light
+                    ? "border-black/10 bg-white/80"
+                    : "border-white/10 bg-black/40"
+                }`}
               >
-                <input
-                  type="color"
-                  aria-label="Choose orb color"
-                  value={chromaticColor}
-                  onChange={(event) => setChromaticColor(event.target.value)}
-                  className="absolute inset-0 size-full cursor-pointer opacity-0"
-                />
-              </span>
-            </label>
+                {(["mono", "spectrum"] as ChromaticMode[]).map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    aria-pressed={chromaticMode === item}
+                    onClick={() => setChromaticMode(item)}
+                    className={`rounded-full px-3 py-1.5 font-mono text-[9px] uppercase tracking-[0.14em] transition-colors ${
+                      chromaticMode === item
+                        ? "bg-black text-white"
+                        : "opacity-45 hover:opacity-75"
+                    }`}
+                  >
+                    {item === "mono" ? "单色" : "彩色"}
+                  </button>
+                ))}
+              </div>
+
+              {chromaticMode === "mono" && (
+                <label className="flex cursor-pointer items-center gap-2 rounded-full border border-black/10 bg-white/80 px-3 py-1 font-mono text-[9px] uppercase tracking-[0.14em]">
+                  Color
+                  <span
+                    className="relative size-5 overflow-hidden rounded-full border border-black/10 shadow-sm"
+                    style={{ backgroundColor: chromaticColor }}
+                  >
+                    <input
+                      type="color"
+                      aria-label="Choose orb color"
+                      value={chromaticColor}
+                      onChange={(event) => setChromaticColor(event.target.value)}
+                      className="absolute inset-0 size-full cursor-pointer opacity-0"
+                    />
+                  </span>
+                </label>
+              )}
+            </div>
           )}
           <div
             className={`flex rounded-full border p-1 ${
