@@ -175,8 +175,8 @@ const fragmentShader = `
       * smoothstep(0.025, 0.14, rippleFront)
       * uRippleActive;
     float rippleWave = (rippleLead - rippleUndertow) * rippleFade;
-    planetP += rippleDirection * rippleWave * 0.05;
-    normal = normalize(normal + vec3(rippleDirection * rippleWave * 0.17, 0.0));
+    planetP += rippleDirection * rippleWave * 0.034;
+    normal = normalize(normal + vec3(rippleDirection * rippleWave * 0.08, 0.0));
 
     float planetRadius = clamp(length(planetP), 0.0, 1.0);
 
@@ -215,7 +215,7 @@ const fragmentShader = `
 
     float aberration = (
       outerLens * 0.0038
-      + abs(rippleWave) * 0.0011
+      + abs(rippleWave) * 0.00045
     ) * uRefraction;
     vec3 sphereColor = sampleChromatic(sphereUv, planetP, aberration);
     vec3 panoramaColor = sampleChromatic(planetUv, vec2(0.0, 1.0), aberration);
@@ -236,7 +236,7 @@ const fragmentShader = `
     color += prism * fresnel * (0.012 + outerLens * 0.04) * uRefraction;
     color += vec3(0.12, 0.45, 0.54) * lowerLeft * outerLens * 0.025 * uRefraction;
     color += prism * outerLens * 0.016 * uRefraction;
-    color += vec3(0.94, 0.985, 1.0) * max(rippleWave, 0.0) * 0.065;
+    color += vec3(0.94, 0.985, 1.0) * max(rippleWave, 0.0) * 0.012;
 
     // The silhouette emerges from compression, Fresnel colour and shadow,
     // rather than from a separately drawn outline.

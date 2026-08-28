@@ -157,21 +157,26 @@ const fragmentShader = `
       fromClick * 1.85 + vec2(time * 0.12, -time * 0.09),
       2
     );
-    float fogRadius = uClickAge * 0.5;
-    float fogDistance = clickDistance + (fogNoise - 0.5) * 0.3;
+    float fogRadius = uClickAge * 0.62;
+    float fogDistance = clickDistance + (fogNoise - 0.5) * 0.38;
     float fogFill = 1.0 - smoothstep(
       fogRadius - 0.2,
       fogRadius + 0.18,
       fogDistance
     );
-    float viewportFog = fogFill
-      * (0.36 + fogNoise * 0.64)
-      * exp(-uClickAge * 0.38)
+    float viewportFog = clamp(
+      fogFill
+      * (0.42 + fogNoise * 0.72)
+      * exp(-uClickAge * 0.28)
       * smoothstep(0.02, 0.18, uClickAge)
       * uClickActive
-      * (1.0 - uLensEnabled);
+      * (1.0 - uLensEnabled)
+      * 1.35,
+      0.0,
+      1.0
+    );
 
-    sceneUnit += clickDirection * orbRipple * 0.052;
+    sceneUnit += clickDirection * orbRipple * 0.034;
 
     // The orb and the media lens remain separate components. This only borrows
     // the media lens' directional rim deformation: the orb's own material is
@@ -326,7 +331,7 @@ const fragmentShader = `
       + (nx - ny) * 0.12
       + fieldEnergy * 0.16
       + extraction * 0.11;
-    fluidSurface -= viewportFog * 0.22;
+    fluidSurface -= viewportFog * 0.4;
     float sm = smoothstep(1.30, 0.58, fluidSurface);
     float d = sm * l * l * l * 2.0;
     vec3 norm = normalize(vec3(blobUv.x, blobUv.y, 0.7 - d));
@@ -363,7 +368,7 @@ const fragmentShader = `
     col += gradientColor
       * (0.13 + uFusionPass * 0.04 + n * (0.35 + uFusionPass * 0.08))
       * sm;
-    col += gradientColor * viewportFog * sm * 0.28;
+    col += gradientColor * viewportFog * sm * 0.38;
 
     float f = fractal(coupledNoise * 2.0 + time, 2) + 0.1;
     vec2 innerOrigin = blobUv
@@ -405,7 +410,7 @@ const fragmentShader = `
       * fieldVisibility
       * 0.3;
     vec3 result = mix(blackVisual * 0.88, col, sm);
-    float fogAlpha = viewportFog * (0.16 + fieldEnergy * 0.24);
+    float fogAlpha = viewportFog * (0.28 + fieldEnergy * 0.36);
     float alpha = clamp(blobAlpha + orbitAlpha + fogAlpha, 0.0, 1.0);
 
     result = pow(max(result, 0.0), vec3(0.95));
@@ -610,10 +615,10 @@ const fragmentShader = `
       );
     }
 
-    result += gradientColor * max(orbRipple, 0.0) * 0.13;
     result += mix(gradientColor, vec3(0.98, 0.99, 1.0), 0.35)
       * viewportFog
-      * 0.12;
+      * 0.32;
+    alpha = max(alpha, viewportFog * (0.3 + fieldEnergy * 0.14));
 
     vec2 screenUv = gl_FragCoord.xy / uResolution.xy;
     float frameDistance = min(
