@@ -150,20 +150,33 @@ const fragmentShader = `
     planetP += normalize(toPointer + vec2(0.0001))
       * pointerReach * outerLens * 0.012 * uRefraction;
 
-    // Click ripple: exactly one broad liquid front, with no trailing rings.
+    // ReactBits Cursor Wave × Minimal Ripple: one eased liquid front with a
+    // broad undertow, rather than a stack of decorative concentric rings.
     vec2 ripplePoint = (uRippleOrigin - 0.5) * 2.0;
     vec2 fromRipple = p - ripplePoint;
     float rippleDistance = length(fromRipple);
     vec2 rippleDirection = normalize(fromRipple + vec2(0.0001));
-    float rippleFront = uRippleAge * 0.8;
+    float rippleFront = uRippleAge * 0.72;
     float rippleDelta = rippleDistance - rippleFront;
-    float ripplePulse = exp(-rippleDelta * rippleDelta * 48.0);
-    float rippleFade = exp(-uRippleAge * 0.48)
-      * smoothstep(0.025, 0.12, rippleFront)
+    float rippleWidth = mix(0.22, 0.115, smoothstep(0.0, 1.45, uRippleAge));
+    float rippleProfile = clamp(
+      1.0 - abs(rippleDelta) / max(rippleWidth, 0.001),
+      0.0,
+      1.0
+    );
+    float rippleLead = pow(sin(rippleProfile * TAU * 0.5), 1.35);
+    float undertowProfile = clamp(
+      1.0 - abs(rippleDelta + rippleWidth * 0.82) / (rippleWidth * 1.45),
+      0.0,
+      1.0
+    );
+    float rippleUndertow = sin(undertowProfile * TAU * 0.5) * 0.26;
+    float rippleFade = exp(-uRippleAge * 0.56)
+      * smoothstep(0.025, 0.14, rippleFront)
       * uRippleActive;
-    float rippleWave = ripplePulse * rippleFade;
-    planetP += rippleDirection * rippleWave * 0.034;
-    normal = normalize(normal + vec3(rippleDirection * rippleWave * 0.12, 0.0));
+    float rippleWave = (rippleLead - rippleUndertow) * rippleFade;
+    planetP += rippleDirection * rippleWave * 0.05;
+    normal = normalize(normal + vec3(rippleDirection * rippleWave * 0.17, 0.0));
 
     float planetRadius = clamp(length(planetP), 0.0, 1.0);
 
@@ -202,7 +215,7 @@ const fragmentShader = `
 
     float aberration = (
       outerLens * 0.0038
-      + rippleWave * 0.0008
+      + abs(rippleWave) * 0.0011
     ) * uRefraction;
     vec3 sphereColor = sampleChromatic(sphereUv, planetP, aberration);
     vec3 panoramaColor = sampleChromatic(planetUv, vec2(0.0, 1.0), aberration);
@@ -223,7 +236,7 @@ const fragmentShader = `
     color += prism * fresnel * (0.012 + outerLens * 0.04) * uRefraction;
     color += vec3(0.12, 0.45, 0.54) * lowerLeft * outerLens * 0.025 * uRefraction;
     color += prism * outerLens * 0.016 * uRefraction;
-    color += vec3(0.94, 0.985, 1.0) * rippleWave * 0.045;
+    color += vec3(0.94, 0.985, 1.0) * max(rippleWave, 0.0) * 0.065;
 
     // The silhouette emerges from compression, Fresnel colour and shadow,
     // rather than from a separately drawn outline.

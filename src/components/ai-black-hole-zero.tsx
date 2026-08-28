@@ -41,6 +41,9 @@ const fragmentShader = `
   uniform float uFusionPass;
   uniform float uLensEnabled;
   uniform float uCleanLight;
+  uniform vec2 uClickOrigin;
+  uniform float uClickAge;
+  uniform float uClickActive;
   uniform float uSurfaceMode;
   uniform vec3 uColor1;
   uniform vec3 uColor2;
@@ -120,6 +123,55 @@ const fragmentShader = `
     float minRes = min(uResolution.x, uResolution.y);
     vec2 sceneUnit = (gl_FragCoord.xy * 2.0 - uResolution.xy) / minRes;
     float time = uTime * uSpeed;
+
+    // ReactBits Cursor Wave supplies the expanding single-front model; Minimal
+    // Ripple supplies the sine-eased crest and decay. Orb uses it as liquid
+    // refraction, while Viewport turns the same event into volumetric fog.
+    vec2 clickPoint = (uClickOrigin * 2.0 - 1.0) * uResolution.xy / minRes;
+    vec2 fromClick = sceneUnit - clickPoint;
+    float clickDistance = length(fromClick);
+    vec2 clickDirection = normalize(fromClick + vec2(0.0001));
+    float clickFront = uClickAge * 0.72;
+    float clickWidth = mix(0.2, 0.1, smoothstep(0.0, 1.5, uClickAge));
+    float clickDelta = clickDistance - clickFront;
+    float clickProfile = clamp(
+      1.0 - abs(clickDelta) / max(clickWidth, 0.001),
+      0.0,
+      1.0
+    );
+    float clickLead = pow(sin(clickProfile * PI), 1.35);
+    float clickUndertowProfile = clamp(
+      1.0 - abs(clickDelta + clickWidth * 0.82) / (clickWidth * 1.45),
+      0.0,
+      1.0
+    );
+    float clickUndertow = sin(clickUndertowProfile * PI) * 0.26;
+    float clickFade = exp(-uClickAge * 0.56)
+      * smoothstep(0.025, 0.14, clickFront)
+      * uClickActive;
+    float orbRipple = (clickLead - clickUndertow)
+      * clickFade
+      * uLensEnabled;
+
+    float fogNoise = fractal(
+      fromClick * 1.85 + vec2(time * 0.12, -time * 0.09),
+      2
+    );
+    float fogRadius = uClickAge * 0.5;
+    float fogDistance = clickDistance + (fogNoise - 0.5) * 0.3;
+    float fogFill = 1.0 - smoothstep(
+      fogRadius - 0.2,
+      fogRadius + 0.18,
+      fogDistance
+    );
+    float viewportFog = fogFill
+      * (0.36 + fogNoise * 0.64)
+      * exp(-uClickAge * 0.38)
+      * smoothstep(0.02, 0.18, uClickAge)
+      * uClickActive
+      * (1.0 - uLensEnabled);
+
+    sceneUnit += clickDirection * orbRipple * 0.052;
 
     // The orb and the media lens remain separate components. This only borrows
     // the media lens' directional rim deformation: the orb's own material is
@@ -274,6 +326,7 @@ const fragmentShader = `
       + (nx - ny) * 0.12
       + fieldEnergy * 0.16
       + extraction * 0.11;
+    fluidSurface -= viewportFog * 0.22;
     float sm = smoothstep(1.30, 0.58, fluidSurface);
     float d = sm * l * l * l * 2.0;
     vec3 norm = normalize(vec3(blobUv.x, blobUv.y, 0.7 - d));
@@ -310,6 +363,7 @@ const fragmentShader = `
     col += gradientColor
       * (0.13 + uFusionPass * 0.04 + n * (0.35 + uFusionPass * 0.08))
       * sm;
+    col += gradientColor * viewportFog * sm * 0.28;
 
     float f = fractal(coupledNoise * 2.0 + time, 2) + 0.1;
     vec2 innerOrigin = blobUv
@@ -351,7 +405,8 @@ const fragmentShader = `
       * fieldVisibility
       * 0.3;
     vec3 result = mix(blackVisual * 0.88, col, sm);
-    float alpha = clamp(blobAlpha + orbitAlpha, 0.0, 1.0);
+    float fogAlpha = viewportFog * (0.16 + fieldEnergy * 0.24);
+    float alpha = clamp(blobAlpha + orbitAlpha + fogAlpha, 0.0, 1.0);
 
     result = pow(max(result, 0.0), vec3(0.95));
     float sourceAlpha = alpha;
@@ -555,6 +610,11 @@ const fragmentShader = `
       );
     }
 
+    result += gradientColor * max(orbRipple, 0.0) * 0.13;
+    result += mix(gradientColor, vec3(0.98, 0.99, 1.0), 0.35)
+      * viewportFog
+      * 0.12;
+
     vec2 screenUv = gl_FragCoord.xy / uResolution.xy;
     float frameDistance = min(
       min(screenUv.x, 1.0 - screenUv.x),
@@ -619,8 +679,11 @@ export default function AIBlackHoleZero({
     const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     const pointerTarget = new THREE.Vector2(0.5, 0.5);
     const pointerSmooth = new THREE.Vector2(0.5, 0.5);
+    const clickOrigin = new THREE.Vector2(0.5, 0.5);
     let cursorTarget = 0;
     let cursorSmooth = 0;
+    let clickAge = 10;
+    let clickActive = 0;
 
     const palette = theme === "graphite"
       ? ["#858b98", "#777685", "#748b91", "#87948f"] as const
@@ -644,6 +707,9 @@ export default function AIBlackHoleZero({
       uFusionPass: { value: fusionPass ? 1 : 0 },
       uLensEnabled: { value: lensEnabled ? 1 : 0 },
       uCleanLight: { value: theme === "light" ? 1 : 0 },
+      uClickOrigin: { value: clickOrigin },
+      uClickAge: { value: clickAge },
+      uClickActive: { value: clickActive },
       uSurfaceMode: { value: surfaceMode },
       uColor1: { value: toRgb(palette[0]) },
       uColor2: { value: toRgb(palette[1]) },
@@ -692,9 +758,20 @@ export default function AIBlackHoleZero({
       cursorTarget = 0;
       pointerTarget.set(0.5, 0.5);
     };
+    const onPointerDown = (event: PointerEvent) => {
+      if (paused) return;
+      const rect = container.getBoundingClientRect();
+      clickOrigin.set(
+        (event.clientX - rect.left) / rect.width,
+        1 - (event.clientY - rect.top) / rect.height,
+      );
+      clickAge = 0;
+      clickActive = 1;
+    };
     container.addEventListener("pointermove", onPointerMove);
     container.addEventListener("pointerenter", onPointerEnter);
     container.addEventListener("pointerleave", onPointerLeave);
+    container.addEventListener("pointerdown", onPointerDown);
 
     const timer = new THREE.Timer();
     timer.connect(document);
@@ -707,9 +784,15 @@ export default function AIBlackHoleZero({
       const ease = 1 - Math.exp(-delta / 0.15);
       pointerSmooth.lerp(pointerTarget, ease);
       cursorSmooth += (cursorTarget - cursorSmooth) * ease;
+      if (!paused && clickActive > 0) {
+        clickAge += delta;
+        if (clickAge > 3.4) clickActive = 0;
+      }
       uniforms.uTime.value = elapsed;
       uniforms.uSpeed.value = paused ? 0 : 0.82;
       uniforms.uCursorActive.value = paused ? 0 : cursorSmooth;
+      uniforms.uClickAge.value = clickAge;
+      uniforms.uClickActive.value = paused ? 0 : clickActive;
       renderer.render(scene, camera);
     };
     animate();
@@ -721,6 +804,7 @@ export default function AIBlackHoleZero({
       container.removeEventListener("pointermove", onPointerMove);
       container.removeEventListener("pointerenter", onPointerEnter);
       container.removeEventListener("pointerleave", onPointerLeave);
+      container.removeEventListener("pointerdown", onPointerDown);
       scene.remove(mesh);
       geometry.dispose();
       material.dispose();
@@ -734,7 +818,7 @@ export default function AIBlackHoleZero({
   return (
     <div
       ref={containerRef}
-      className={className}
+      className={`cursor-pointer touch-manipulation ${className ?? ""}`}
       aria-label="AI Blob and Black Hole fused WebGL study"
     />
   );
