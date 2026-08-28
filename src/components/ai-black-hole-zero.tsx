@@ -341,7 +341,8 @@ const fragmentShader = `
       * (1.0 - extraction * 0.1);
 
     float orbitRange = smoothstep(2.55, 0.76, length(blobUv));
-    float orbitAlpha = (1.0 - sm) * orbitRange * fieldVisibility * 0.86;
+    float orbitStructure = smoothstep(0.18, 0.62, fieldVisibility);
+    float orbitAlpha = (1.0 - sm) * orbitRange * orbitStructure * 0.86;
     vec3 blackVisual = blackField / (vec3(1.0) + blackField * 0.28);
     blackVisual *= mix(vec3(1.0), gradientColor * 1.45, 0.56);
     blackVisual += gradientColor
@@ -493,15 +494,6 @@ const fragmentShader = `
         ),
         uLensEnabled
       );
-      float outerLensEdge = uLensEnabled * smoothstep(
-        lensRadius - 0.036,
-        lensRadius - 0.008,
-        warpedLensDistance
-      ) * (1.0 - smoothstep(
-        lensRadius - 0.006,
-        lensRadius + 0.022,
-        warpedLensDistance
-      ));
       float lensSource = clamp(
         fieldVisibility * 0.72
           + edgeBridge * 0.86
@@ -537,16 +529,11 @@ const fragmentShader = `
         lensedField,
         clamp(lensFlux * 0.62 + pointerCaustic * 0.24, 0.0, 0.68)
       );
-      result += lensColor
-        * (outerLensEdge * (0.1 + lensSource * 0.16)
-          + pointerCaustic * 0.16);
+      result += lensColor * pointerCaustic * 0.16;
       result = clamp(result, 0.0, 1.0);
 
       float containedContentAlpha = alpha * contentContainment;
-      float lensAlpha = lensFlux * 0.58
-        + outerLensEdge * (0.1 + lensSource * 0.16)
-        + pointerCaustic * 0.18;
-      alpha = max(containedContentAlpha, lensAlpha);
+      alpha = containedContentAlpha;
     }
 
     if (uSurfaceMode < 1.5) {
@@ -562,7 +549,6 @@ const fragmentShader = `
         max(result, sharedLensColor * (0.48 + fieldVisibility * 0.38)),
         clamp(sharedLensEnergy * 0.72, 0.0, 0.62)
       );
-      alpha = max(alpha, sharedLensEnergy * 0.58);
     }
 
     vec2 screenUv = gl_FragCoord.xy / uResolution.xy;

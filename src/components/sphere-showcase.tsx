@@ -45,7 +45,12 @@ export default function SphereShowcase() {
 
   const frameClass = surface === "viewport"
     ? "absolute inset-0"
-    : "relative aspect-square w-[min(76vw,680px)] overflow-hidden rounded-full border shadow-[0_28px_90px_rgba(16,24,48,0.14)]";
+    : "relative aspect-square w-[min(76vw,680px)] overflow-hidden rounded-full";
+  const frameSurface = surface === "orb"
+    ? "bg-transparent"
+    : light
+      ? "bg-white"
+      : "bg-[#020208]";
 
   return (
     <main
@@ -54,13 +59,7 @@ export default function SphereShowcase() {
       }`}
     >
       <section className="relative grid min-h-svh place-items-center px-4 py-28 sm:px-8">
-        <div
-          className={`${frameClass} ${
-            light
-              ? "border-black/8 bg-white"
-              : "border-white/10 bg-[#020208]"
-          }`}
-        >
+        <div className={`${frameClass} ${frameSurface}`}>
           <AIBlackHoleZero
             paused={reducedMotion}
             lensEnabled={surface === "orb"}
