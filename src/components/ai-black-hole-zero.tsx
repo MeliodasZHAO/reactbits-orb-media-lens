@@ -6,6 +6,7 @@ import * as THREE from "three";
 type AIBlackHoleZeroProps = {
   paused?: boolean;
   fusionPass?: boolean;
+  lensEnabled?: boolean;
   theme?: "dark" | "light" | "graphite" | "chromatic";
   color?: string;
   className?: string;
@@ -37,6 +38,7 @@ const fragmentShader = `
   uniform vec2 uPointer;
   uniform float uCursorActive;
   uniform float uFusionPass;
+  uniform float uLensEnabled;
   uniform float uSurfaceMode;
   uniform vec3 uColor1;
   uniform vec3 uColor2;
@@ -129,7 +131,8 @@ const fragmentShader = `
     vec2 lensDirection = lensP / max(lensNormalizedRadius, 0.001);
     vec2 lensTangent = vec2(-lensDirection.y, lensDirection.x);
     float lensAnnulus = smoothstep(0.79, 0.96, lensNormalizedRadius)
-      * (1.0 - smoothstep(0.995, 1.018, lensNormalizedRadius));
+      * (1.0 - smoothstep(0.995, 1.018, lensNormalizedRadius))
+      * uLensEnabled;
 
     vec2 lensGravityPoint = vec2(-0.28, -0.92);
     vec2 lensGravityVector = lensGravityPoint - lensP;
@@ -480,12 +483,16 @@ const fragmentShader = `
       alpha = max(chromaticBodyAlpha, chromaticOrbitAlpha);
 
       float contentDistance = lensDistance + lensWarp * 0.34;
-      float contentContainment = 1.0 - smoothstep(
-        contentRadius - 0.024,
-        contentRadius + 0.018,
-        contentDistance
+      float contentContainment = mix(
+        1.0,
+        1.0 - smoothstep(
+          contentRadius - 0.024,
+          contentRadius + 0.018,
+          contentDistance
+        ),
+        uLensEnabled
       );
-      float outerLensEdge = smoothstep(
+      float outerLensEdge = uLensEnabled * smoothstep(
         lensRadius - 0.036,
         lensRadius - 0.008,
         warpedLensDistance
@@ -591,6 +598,7 @@ function monochromePalette(hex: string) {
 export default function AIBlackHoleZero({
   paused = false,
   fusionPass = true,
+  lensEnabled = false,
   theme = "dark",
   color = "#6978ff",
   className,
@@ -640,6 +648,7 @@ export default function AIBlackHoleZero({
       uPointer: { value: pointerSmooth },
       uCursorActive: { value: 0 },
       uFusionPass: { value: fusionPass ? 1 : 0 },
+      uLensEnabled: { value: lensEnabled ? 1 : 0 },
       uSurfaceMode: { value: surfaceMode },
       uColor1: { value: toRgb(palette[0]) },
       uColor2: { value: toRgb(palette[1]) },
@@ -725,7 +734,7 @@ export default function AIBlackHoleZero({
         container.removeChild(renderer.domElement);
       }
     };
-  }, [color, fusionPass, paused, theme]);
+  }, [color, fusionPass, lensEnabled, paused, theme]);
 
   return (
     <div

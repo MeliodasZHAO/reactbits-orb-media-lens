@@ -61,6 +61,7 @@ export default function SphereShowcase() {
         >
           <AIBlackHoleZero
             paused={reducedMotion}
+            lensEnabled={surface === "orb"}
             theme={theme}
             color={chromaticColor}
             className="absolute inset-0 h-full w-full"
