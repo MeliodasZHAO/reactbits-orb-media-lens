@@ -2,16 +2,23 @@
 
 import { useState } from "react";
 import MediaLensShowcase from "@/components/media-lens-showcase";
+import ParticleBloomShowcase from "@/components/particle-bloom-showcase";
 import SphereShowcase from "@/components/sphere-showcase";
 
-type Study = "saved-orb" | "media-lens";
+type Study = "saved-orb" | "media-lens" | "particle-bloom";
 
 export default function LabShowcase() {
-  const [study, setStudy] = useState<Study>("media-lens");
+  const [study, setStudy] = useState<Study>("particle-bloom");
+
+  const content = study === "saved-orb"
+    ? <SphereShowcase />
+    : study === "media-lens"
+      ? <MediaLensShowcase />
+      : <ParticleBloomShowcase />;
 
   return (
     <div className="relative">
-      {study === "saved-orb" ? <SphereShowcase /> : <MediaLensShowcase />}
+      {content}
 
       <nav
         aria-label="Study selector"
@@ -20,6 +27,7 @@ export default function LabShowcase() {
         {([
           ["saved-orb", "已存球体"],
           ["media-lens", "媒体透镜"],
+          ["particle-bloom", "蓝色花火"],
         ] as const).map(([value, label]) => (
           <button
             key={value}
