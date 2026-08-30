@@ -47,16 +47,24 @@ float saturate(float value) {
   return clamp(value, 0.0, 1.0);
 }
 
-float easeOutCubic(float value) {
-  float inverse = 1.0 - saturate(value);
-  return 1.0 - inverse * inverse * inverse;
+vec2 cubicBezier(vec2 a, vec2 b, vec2 c, vec2 d, float value) {
+  float x = saturate(value);
+  float inverse = 1.0 - x;
+  return inverse * inverse * inverse * a
+    + 3.0 * inverse * inverse * x * b
+    + 3.0 * inverse * x * x * c
+    + x * x * x * d;
 }
 
-float easeInOutCubic(float value) {
+vec2 cubicBezierTangent(vec2 a, vec2 b, vec2 c, vec2 d, float value) {
   float x = saturate(value);
-  return x < 0.5
-    ? 4.0 * x * x * x
-    : 1.0 - pow(-2.0 * x + 2.0, 3.0) * 0.5;
+  float inverse = 1.0 - x;
+  return normalize(
+    3.0 * inverse * inverse * (b - a)
+    + 6.0 * inverse * x * (c - b)
+    + 3.0 * x * x * (d - c)
+    + vec2(0.0001)
+  );
 }
 
 void main() {
@@ -70,33 +78,70 @@ void main() {
   float streak = 0.0;
   float travelAngle = PI * 0.5;
 
-  vec3 bloomCenter = vec3(0.0, 0.12, 0.0);
+  vec3 bloomCenter = vec3(0.02, 0.12, 0.0);
+  vec2 launchStart = vec2(-0.46, -1.72);
+  vec2 launchControlA = vec2(-0.61, -1.08);
+  vec2 launchControlB = vec2(-0.24, -0.22);
+  vec2 launchEnd = bloomCenter.xy;
+  vec2 lensAxis = normalize(vec2(-0.58, -1.0));
 
   if (aKind < 0.5) {
-    // A narrow launch plume. The head climbs while older sparks trail behind it.
-    float launch = easeOutCubic(t / 1.18);
-    float headY = mix(-1.62, bloomCenter.y, launch);
-    float tailLength = mix(0.06, 0.72, launch);
-    float tail = pow(aSeed, 0.72);
-    positionNow.y = headY - tail * tailLength;
-    positionNow.x =
-      sin(t * 7.0 + aSeedB * 18.0) * (0.008 + tail * 0.034)
-      + (aSeedC - 0.5) * 0.035;
-    positionNow.z = (aSeedD - 0.5) * 0.12;
+    // Three braided comet filaments follow a curved path into the lens axis.
+    // The power curve deliberately retains velocity at impact, so the launch
+    // hands its momentum straight into the opening petals instead of stopping.
+    float launchLinear = saturate(t / 1.14);
+    float launchHead = pow(launchLinear, 0.76);
+    float tail = pow(aSeed, 0.68);
+    float trailLength = mix(0.035, 0.48, smoothstep(0.04, 0.78, launchHead));
+    float pathProgress = max(launchHead - tail * trailLength, 0.0);
+    vec2 path = cubicBezier(
+      launchStart,
+      launchControlA,
+      launchControlB,
+      launchEnd,
+      pathProgress
+    );
+    vec2 tangent = cubicBezierTangent(
+      launchStart,
+      launchControlA,
+      launchControlB,
+      launchEnd,
+      pathProgress
+    );
+    vec2 normalToPath = vec2(-tangent.y, tangent.x);
+    float filament = floor(aSeedC * 3.0) - 1.0;
+    float braid = sin(pathProgress * 25.0 + filament * 2.1 + t * 5.2);
+    float width = (0.004 + tail * 0.034) * (0.58 + 0.42 * aSeedD);
+    path += normalToPath * (
+      filament * width * 0.54
+      + braid * width
+      + (aSeedB - 0.5) * width * 0.7
+    );
+    positionNow = vec3(path, (aSeedD - 0.5) * (0.035 + tail * 0.15));
     alpha =
       smoothstep(0.02, 0.12, t)
       * (1.0 - smoothstep(1.18, 1.52, t))
-      * (1.0 - tail * 0.82);
-    heat = 0.82 + (1.0 - tail) * 0.18;
-    twinkle = 0.9 + 0.1 * sin(t * 22.0 + aSeedB * 40.0);
-    tone = mix(0.35, 0.78, aSeedD);
-    softness = smoothstep(0.16, 0.0, aSeedD) * 0.5;
-    streak = smoothstep(0.62, 1.0, aSeedD);
+      * (0.16 + 0.84 * pow(1.0 - tail, 0.66));
+    heat = 0.66 + (1.0 - tail) * 0.34;
+    twinkle = 0.92 + 0.08 * sin(t * 19.0 + aSeedB * 40.0);
+    tone = mix(0.2, 0.82, aSeedD);
+    softness = smoothstep(0.26, 0.0, aSeedD) * (0.46 + tail * 0.34);
+    streak = smoothstep(0.54, 1.0, aSeedD) * (0.5 + launchHead * 0.5);
+    travelAngle = atan(tangent.y, tangent.x);
   } else if (aKind < 1.5) {
-    // The launch compacts into a luminous, vertically folded bud.
-    float gather = smoothstep(0.72, 1.2, t);
+    // The moving head compresses into a bud while the inner petals are already
+    // opening. This overlap removes the old launch / explosion phase break.
+    float gather = smoothstep(0.72, 1.1, t);
     float release = smoothstep(3.85 + aLayer * 0.12, 5.42 + aLayer * 0.18, t);
-    float coreRound = smoothstep(1.2, 2.15, t);
+    float coreRound = smoothstep(1.02, 1.86, t);
+    float arrivalProgress = pow(saturate(t / 1.14), 0.76);
+    vec2 arrival = cubicBezier(
+      launchStart,
+      launchControlA,
+      launchControlB,
+      launchEnd,
+      arrivalProgress
+    );
     float angle = aSeed * TAU;
     float radius = 0.004 + 0.108 * sqrt(aSeedB);
     float fold = 0.45 + 0.55 * sin(angle * 3.0 + aLayer * PI);
@@ -111,7 +156,11 @@ void main() {
       (aSeedC - 0.5) * radius * 1.35
     );
     vec3 budOffset = mix(foldedBud, roundCore, coreRound);
-    positionNow = bloomCenter + budOffset * mix(0.72, 1.0, gather);
+    vec3 arrivingBud = vec3(arrival, 0.0) + budOffset * 0.46;
+    vec3 openedBud = bloomCenter + budOffset * mix(0.72, 1.0, gather);
+    positionNow = mix(arrivingBud, openedBud, gather);
+    float impactPulse = exp(-pow((t - 1.12) / 0.22, 2.0));
+    positionNow.xy += lensAxis * impactPulse * (aSeedC - 0.5) * 0.035;
     alpha = gather * (1.0 - release) * mix(0.9, 0.38, coreRound);
     heat = 0.72 + 0.28 * (1.0 - aSeedB);
     twinkle = 0.94 + 0.06 * sin(t * 15.0 + aSeedD * 31.0);
@@ -132,18 +181,28 @@ void main() {
       + 0.2 * sin(petalIndex * 1.91 + aLayer * 2.3)
       + 0.05 * sin(petalIndex * 4.17);
     float along = pow(aSeedB, mix(0.52, 0.68, aLayer));
-    float spawn = 1.06 + aLayer * 0.58 + aSeedD * 0.16;
-    float bloom = easeInOutCubic((t - spawn) / (1.38 + aLayer * 0.32));
+    float petalStagger = fract(petalIndex * 0.381966) * 0.12;
+    float spawn = 0.96 + aLayer * 0.38 + petalStagger + aSeedD * 0.065;
+    float bloomAge = max(t - spawn, 0.0);
+    float bloom = 1.0 - exp(
+      -bloomAge * mix(2.85, 1.82, aLayer)
+    );
+    bloom = saturate(bloom);
     float bend =
       sin(along * PI)
       * (0.1 * sin(petalIndex * 1.67 + aLayer * 3.0)
         + 0.055 * sin(t * 0.72 + aSeedD * 5.0));
-    float localAngle =
+    float unfoldedAngle =
       petalAngle
       + (aSeedC - 0.5) * mix(0.06, 0.2, bloom)
       + (aSeedD - 0.5) * 0.08 * bloom * bloom
       + (aLayer - 0.5) * along * 0.15
       + bend * bloom;
+    float unfurl = smoothstep(0.02, 0.68, bloom);
+    float foldedAngle = PI * 0.5
+      + (aSeedC - 0.5) * 0.24
+      + (petalIndex - petalCount * 0.5) * 0.018;
+    float localAngle = mix(foldedAngle, unfoldedAngle, unfurl);
     vec2 direction = vec2(cos(localAngle), sin(localAngle));
     vec2 across = vec2(-direction.y, direction.x);
     float radius = mix(
@@ -157,6 +216,18 @@ void main() {
       * mix(0.024, 0.2 + outerLayer * 0.075 + aLayer * 0.035, bloom);
     vec2 petal = direction * radius + across * petalWidth;
     petal.y *= 0.9;
+
+    // The bloom carries the launch tangent for its first half-second. Long,
+    // quiet diagonal filaments then enter the same rim band that the media
+    // lens stretches from the upper-right toward its lower-left gravity point.
+    vec2 impactDirection = normalize(launchEnd - launchControlB);
+    float momentumCarry = bloomAge * exp(-bloomAge * 3.4);
+    petal += impactDirection * momentumCarry * (0.22 + (1.0 - aLayer) * 0.13);
+    float lensAlignment = pow(abs(dot(direction, lensAxis)), 4.5);
+    float lensReach = outerLayer * pow(along, 3.1) * lensAlignment * bloom;
+    petal += direction * lensReach * (0.18 + aSeedD * 0.16);
+    float upperRightLobe = smoothstep(0.25, 0.88, dot(direction, -lensAxis));
+    petal += lensAxis * upperRightLobe * lensReach * 0.11;
 
     vec2 flow = vec2(
       sin(petal.y * 4.2 + aSeedD * 12.0 + t * 0.76),
@@ -174,7 +245,7 @@ void main() {
       (aSeedC - 0.5) * sin(along * PI) * mix(0.08, 0.72, bloom)
     );
 
-    float born = smoothstep(spawn, spawn + 0.34, t);
+    float born = smoothstep(spawn - 0.035, spawn + 0.16, t);
     float dissolve = 1.0 - smoothstep(4.0 + aSeedD * 0.48, 5.9, t);
     alpha = born * dissolve * mix(0.34, 0.88, sin(along * PI));
     heat = 0.22 + (1.0 - along) * 0.68 + (1.0 - aLayer) * 0.1;
@@ -189,11 +260,22 @@ void main() {
     streak = smoothstep(0.76, 1.0, aSeedD) * (0.4 + along * 0.6);
     travelAngle = localAngle;
   } else {
-    // Fine vapour sparks outrun the petals, then decelerate and disappear.
-    float angle = aSeed * TAU + (aSeedB - 0.5) * 0.34;
-    float spawn = 1.5 + aLayer * 0.42;
-    float bloom = easeOutCubic((t - spawn) / 1.85);
-    float radius = mix(0.04, 0.8 + aSeedC * 0.68, bloom);
+    // Fine vapour reaches the distortion band on the lens diagonal while the
+    // central flower remains legible in the undistorted safe area.
+    float radialAngle = aSeed * TAU + (aSeedB - 0.5) * 0.34;
+    float axisAngle = atan(lensAxis.y, lensAxis.x)
+      + step(0.5, aSeedB) * PI
+      + (aSeedC - 0.5) * 0.5;
+    float axisBias = smoothstep(0.46, 1.0, aLayer) * 0.72;
+    float angle = mix(radialAngle, axisAngle, axisBias);
+    float spawn = 1.18 + aLayer * 0.36;
+    float bloomAge = max(t - spawn, 0.0);
+    float bloom = 1.0 - exp(-bloomAge * mix(2.4, 1.55, aLayer));
+    float radius = mix(
+      0.04,
+      0.72 + aSeedC * 0.54 + axisBias * (0.26 + aSeedD * 0.18),
+      bloom
+    );
     vec2 direction = vec2(cos(angle), sin(angle));
     float drift = max(t - 3.0, 0.0);
     positionNow = bloomCenter + vec3(
@@ -202,7 +284,7 @@ void main() {
       (aSeedB - 0.5) * radius * 0.55
     );
     alpha =
-      smoothstep(spawn, spawn + 0.16, t)
+      smoothstep(spawn - 0.04, spawn + 0.14, t)
       * (1.0 - smoothstep(3.7 + aSeedD * 0.3, 5.92, t))
       * (0.18 + aSeedC * 0.42);
     heat = 0.12 + (1.0 - aSeedC) * 0.36;
@@ -341,11 +423,11 @@ function ParticleField({
 
     for (let index = 0; index < particleTotal; index += 1) {
       const ratio = index / particleTotal;
-      const particleKind = ratio < 0.07
+      const particleKind = ratio < 0.1
         ? 0
-        : ratio < 0.11
+        : ratio < 0.14
           ? 1
-          : ratio < 0.88
+          : ratio < 0.87
             ? 2
             : 3;
       kind[index] = particleKind;
