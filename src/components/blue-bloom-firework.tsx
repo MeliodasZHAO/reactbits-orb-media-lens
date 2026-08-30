@@ -35,6 +35,10 @@ varying float vAlpha;
 varying float vHeat;
 varying float vTwinkle;
 varying float vKind;
+varying float vTone;
+varying float vSoftness;
+varying float vStreak;
+varying float vAngle;
 
 const float PI = 3.14159265359;
 const float TAU = 6.28318530718;
@@ -61,6 +65,10 @@ void main() {
   float alpha = 0.0;
   float heat = 0.5;
   float twinkle = 1.0;
+  float tone = aSeedC;
+  float softness = 0.0;
+  float streak = 0.0;
+  float travelAngle = PI * 0.5;
 
   vec3 bloomCenter = vec3(0.0, 0.12, 0.0);
 
@@ -72,7 +80,7 @@ void main() {
     float tail = pow(aSeed, 0.72);
     positionNow.y = headY - tail * tailLength;
     positionNow.x =
-      sin(t * 10.0 + aSeedB * 18.0) * (0.008 + tail * 0.026)
+      sin(t * 7.0 + aSeedB * 18.0) * (0.008 + tail * 0.034)
       + (aSeedC - 0.5) * 0.035;
     positionNow.z = (aSeedD - 0.5) * 0.12;
     alpha =
@@ -80,7 +88,10 @@ void main() {
       * (1.0 - smoothstep(1.18, 1.52, t))
       * (1.0 - tail * 0.82);
     heat = 0.82 + (1.0 - tail) * 0.18;
-    twinkle = 0.75 + 0.25 * sin(t * 34.0 + aSeedB * 40.0);
+    twinkle = 0.9 + 0.1 * sin(t * 22.0 + aSeedB * 40.0);
+    tone = mix(0.35, 0.78, aSeedD);
+    softness = smoothstep(0.16, 0.0, aSeedD) * 0.5;
+    streak = smoothstep(0.62, 1.0, aSeedD);
   } else if (aKind < 1.5) {
     // The launch compacts into a luminous, vertically folded bud.
     float gather = smoothstep(0.72, 1.2, t);
@@ -101,69 +112,105 @@ void main() {
     );
     vec3 budOffset = mix(foldedBud, roundCore, coreRound);
     positionNow = bloomCenter + budOffset * mix(0.72, 1.0, gather);
-    alpha = gather * (1.0 - release);
+    alpha = gather * (1.0 - release) * mix(0.9, 0.38, coreRound);
     heat = 0.72 + 0.28 * (1.0 - aSeedB);
-    twinkle = 0.88 + 0.12 * sin(t * 22.0 + aSeedD * 31.0);
+    twinkle = 0.94 + 0.06 * sin(t * 15.0 + aSeedD * 31.0);
+    tone = mix(0.48, 0.92, aSeedC);
+    softness = smoothstep(0.18, 0.0, aSeedD) * 0.7;
   } else if (aKind < 2.5) {
-    // Six legible particle petals unfold in staggered layers from the bud.
-    float petalIndex = floor(aSeed * 6.0);
-    float petalAngle = PI * 0.5 + petalIndex * TAU / 6.0;
-    float petalVariation = 0.9 + 0.14 * sin(petalIndex * 2.17 + 0.6);
-    float along = pow(aSeedB, 0.58);
-    float spawn = 1.2 + aLayer * 0.3 + aSeedD * 0.07;
-    float bloom = easeInOutCubic((t - spawn) / 1.34);
+    // Interlocking inner and outer petals create one asymmetric living bloom.
+    float outerLayer = step(0.46, aLayer);
+    float petalCount = mix(7.0, 9.0, outerLayer);
+    float petalIndex = floor(aSeed * petalCount);
+    float petalAngle =
+      PI * 0.5
+      + petalIndex * TAU / petalCount
+      + outerLayer * 0.19
+      + 0.075 * sin(petalIndex * 2.41 + outerLayer);
+    float petalVariation =
+      0.84
+      + 0.2 * sin(petalIndex * 1.91 + aLayer * 2.3)
+      + 0.05 * sin(petalIndex * 4.17);
+    float along = pow(aSeedB, mix(0.52, 0.68, aLayer));
+    float spawn = 1.06 + aLayer * 0.58 + aSeedD * 0.16;
+    float bloom = easeInOutCubic((t - spawn) / (1.38 + aLayer * 0.32));
+    float bend =
+      sin(along * PI)
+      * (0.1 * sin(petalIndex * 1.67 + aLayer * 3.0)
+        + 0.055 * sin(t * 0.72 + aSeedD * 5.0));
     float localAngle =
       petalAngle
-      + (aSeedC - 0.5) * mix(0.08, 0.24, bloom)
-      + (aSeedD - 0.5) * 0.1 * bloom * bloom
-      + (aLayer - 0.5) * along * 0.12
-      + sin(along * PI) * (0.07 + 0.045 * sin(petalIndex * 1.73)) * bloom;
+      + (aSeedC - 0.5) * mix(0.06, 0.2, bloom)
+      + (aSeedD - 0.5) * 0.08 * bloom * bloom
+      + (aLayer - 0.5) * along * 0.15
+      + bend * bloom;
     vec2 direction = vec2(cos(localAngle), sin(localAngle));
     vec2 across = vec2(-direction.y, direction.x);
     float radius = mix(
       0.035 + along * 0.09,
-      0.12 + along * mix(1.08, 1.42, aLayer) * petalVariation,
+      0.1 + along * mix(0.76, 1.42, aLayer) * petalVariation,
       bloom
     );
     float petalWidth =
       (aSeedC - 0.5)
       * sin(along * PI)
-      * mix(0.028, 0.27 + aLayer * 0.045, bloom);
+      * mix(0.024, 0.2 + outerLayer * 0.075 + aLayer * 0.035, bloom);
     vec2 petal = direction * radius + across * petalWidth;
     petal.y *= 0.9;
 
+    vec2 flow = vec2(
+      sin(petal.y * 4.2 + aSeedD * 12.0 + t * 0.76),
+      cos(petal.x * 3.7 - aSeedC * 10.0 - t * 0.58)
+    );
+    petal += flow * (0.008 + along * 0.028) * bloom;
+
     float settle = max(t - 3.35, 0.0);
-    petal.x += (aSeedD - 0.5) * settle * 0.055;
-    petal.y -= settle * settle * (0.018 + aSeedC * 0.018);
+    petal.x +=
+      (aSeedD - 0.5) * settle * 0.06
+      + sin(t * 1.1 + petalIndex) * settle * 0.008;
+    petal.y -= settle * settle * (0.014 + aSeedC * 0.016);
     positionNow = bloomCenter + vec3(
       petal,
       (aSeedC - 0.5) * sin(along * PI) * mix(0.08, 0.72, bloom)
     );
 
-    float born = smoothstep(spawn, spawn + 0.13, t);
-    float dissolve = 1.0 - smoothstep(4.18 + aSeedD * 0.18, 5.82, t);
-    alpha = born * dissolve * mix(0.52, 1.0, sin(along * PI));
+    float born = smoothstep(spawn, spawn + 0.34, t);
+    float dissolve = 1.0 - smoothstep(4.0 + aSeedD * 0.48, 5.9, t);
+    alpha = born * dissolve * mix(0.34, 0.88, sin(along * PI));
     heat = 0.22 + (1.0 - along) * 0.68 + (1.0 - aLayer) * 0.1;
-    twinkle = 0.78 + 0.22 * sin(t * (13.0 + aSeedD * 11.0) + aSeedC * 47.0);
+    twinkle = 0.91 + 0.09 * sin(t * (6.0 + aSeedD * 5.0) + aSeedC * 47.0);
+    tone = fract(
+      petalIndex * 0.127
+      + aLayer * 0.34
+      + aSeedC * 0.23
+      + t * 0.018
+    );
+    softness = smoothstep(0.28, 0.0, aSeedD);
+    streak = smoothstep(0.76, 1.0, aSeedD) * (0.4 + along * 0.6);
+    travelAngle = localAngle;
   } else {
     // Fine vapour sparks outrun the petals, then decelerate and disappear.
     float angle = aSeed * TAU + (aSeedB - 0.5) * 0.34;
     float spawn = 1.5 + aLayer * 0.42;
-    float bloom = easeOutCubic((t - spawn) / 1.65);
+    float bloom = easeOutCubic((t - spawn) / 1.85);
     float radius = mix(0.04, 0.8 + aSeedC * 0.68, bloom);
     vec2 direction = vec2(cos(angle), sin(angle));
     float drift = max(t - 3.0, 0.0);
     positionNow = bloomCenter + vec3(
-      direction.x * radius + sin(t * 2.1 + aSeedD * 15.0) * drift * 0.022,
+      direction.x * radius + sin(t * 1.7 + aSeedD * 15.0) * drift * 0.03,
       direction.y * radius * 0.9 - drift * drift * 0.026,
       (aSeedB - 0.5) * radius * 0.55
     );
     alpha =
       smoothstep(spawn, spawn + 0.16, t)
       * (1.0 - smoothstep(3.7 + aSeedD * 0.3, 5.92, t))
-      * (0.3 + aSeedC * 0.52);
+      * (0.18 + aSeedC * 0.42);
     heat = 0.12 + (1.0 - aSeedC) * 0.36;
-    twinkle = 0.62 + 0.38 * sin(t * 19.0 + aSeedD * 53.0);
+    twinkle = 0.86 + 0.14 * sin(t * 8.0 + aSeedD * 53.0);
+    tone = fract(aSeedB * 0.7 + aSeedD * 0.46 + t * 0.012);
+    softness = 0.38 + smoothstep(0.4, 0.0, aSeedD) * 0.62;
+    streak = smoothstep(0.82, 1.0, aSeedD);
+    travelAngle = angle;
   }
 
   // Pointer movement changes the viewpoint, not the particle physics.
@@ -176,8 +223,9 @@ void main() {
 
   vec4 mvPosition = modelViewMatrix * vec4(positionNow, 1.0);
   float perspective = 5.0 / max(-mvPosition.z, 0.8);
+  float textureScale = mix(1.0, 2.35, softness) * mix(1.0, 1.45, streak);
   gl_PointSize = clamp(
-    aSize * uPointScale * uPixelRatio * perspective,
+    aSize * textureScale * uPointScale * uPixelRatio * perspective,
     1.0,
     16.0 * uPixelRatio
   );
@@ -187,6 +235,10 @@ void main() {
   vHeat = saturate(heat);
   vTwinkle = saturate(twinkle);
   vKind = aKind;
+  vTone = tone;
+  vSoftness = softness;
+  vStreak = streak;
+  vAngle = travelAngle;
 }
 `;
 
@@ -195,28 +247,49 @@ precision highp float;
 
 uniform vec3 uDeep;
 uniform vec3 uBlue;
+uniform vec3 uCyan;
+uniform vec3 uViolet;
 uniform vec3 uIce;
 
 varying float vAlpha;
 varying float vHeat;
 varying float vTwinkle;
 varying float vKind;
+varying float vTone;
+varying float vSoftness;
+varying float vStreak;
+varying float vAngle;
 
 void main() {
   vec2 point = gl_PointCoord * 2.0 - 1.0;
   float distanceFromCenter = length(point);
   if (distanceFromCenter > 1.0 || vAlpha <= 0.001) discard;
 
+  vec2 axis = vec2(cos(vAngle), sin(vAngle));
+  vec2 perpendicular = vec2(-axis.y, axis.x);
+  vec2 aligned = vec2(dot(point, axis), dot(point, perpendicular));
   float core = 1.0 - smoothstep(0.0, 0.22, distanceFromCenter);
   float body = 1.0 - smoothstep(0.12, 0.62, distanceFromCenter);
   float halo = exp(-distanceFromCenter * distanceFromCenter * 4.8);
-  float fineSpark = step(2.5, vKind);
-  float shape = mix(body * 0.82 + halo * 0.28, body * 0.94 + halo * 0.12, fineSpark);
-  float alpha = shape * vAlpha;
+  float streakDistance = length(vec2(aligned.x * 0.42, aligned.y * 1.42));
+  float streakShape = 1.0 - smoothstep(0.18, 0.86, streakDistance);
+  float mistShape =
+    exp(-distanceFromCenter * distanceFromCenter * 2.25)
+    * (1.0 - smoothstep(0.76, 1.0, distanceFromCenter));
+  float sparkShape = body * 0.78 + halo * 0.2;
+  float shape = mix(sparkShape, mistShape * 0.58, vSoftness);
+  shape = mix(shape, streakShape * 0.84 + halo * 0.08, vStreak);
+  float alpha = shape * vAlpha * mix(1.0, 0.42, vSoftness);
 
-  vec3 base = mix(uDeep, uBlue, smoothstep(0.0, 0.72, vHeat));
-  base = mix(base, uIce, core * (0.38 + vHeat * 0.62));
-  base *= 1.02 + vTwinkle * 0.34;
+  vec3 blueFamily = mix(uDeep, uBlue, smoothstep(0.0, 0.46, vTone));
+  vec3 spectralFamily = mix(
+    uCyan,
+    uViolet,
+    smoothstep(0.38, 0.86, vTone)
+  );
+  vec3 base = mix(blueFamily, spectralFamily, smoothstep(0.3, 0.82, vTone));
+  base = mix(base, uIce, core * (0.3 + vHeat * 0.7));
+  base *= 0.98 + vTwinkle * 0.24;
 
   gl_FragColor = vec4(base * alpha, alpha);
 }
@@ -268,26 +341,33 @@ function ParticleField({
 
     for (let index = 0; index < particleTotal; index += 1) {
       const ratio = index / particleTotal;
-      const particleKind = ratio < 0.1
+      const particleKind = ratio < 0.07
         ? 0
-        : ratio < 0.19
+        : ratio < 0.11
           ? 1
-          : ratio < 0.84
+          : ratio < 0.88
             ? 2
             : 3;
       kind[index] = particleKind;
       seed[index] = random();
       seedB[index] = random();
       seedC[index] = random();
-      seedD[index] = random();
+      const textureSeed = random();
+      seedD[index] = textureSeed;
       layer[index] = random();
       particleSize[index] = particleKind === 0
-        ? 0.62 + random() * 0.9
+        ? 0.46 + random() * 0.78
         : particleKind === 1
-          ? 0.72 + random() * 1.08
+          ? 0.58 + random() * 0.92
           : particleKind === 2
-            ? 0.48 + random() * 1.05
-            : 0.34 + random() * 0.62;
+            ? textureSeed < 0.28
+              ? 0.82 + random() * 0.76
+              : textureSeed > 0.76
+                ? 0.52 + random() * 0.72
+                : 0.3 + random() * 0.54
+            : textureSeed < 0.4
+              ? 0.76 + random() * 0.68
+              : 0.26 + random() * 0.48;
     }
 
     const buffer = new THREE.BufferGeometry();
@@ -311,6 +391,8 @@ function ParticleField({
     uPointer: { value: new THREE.Vector2() },
     uDeep: { value: new THREE.Color("#0b2b88") },
     uBlue: { value: new THREE.Color(color) },
+    uCyan: { value: new THREE.Color("#6ce8ff") },
+    uViolet: { value: new THREE.Color("#b9a7ff") },
     uIce: { value: new THREE.Color("#e8fbff") },
   }), [color, cycleDuration]);
 
@@ -325,7 +407,9 @@ function ParticleField({
     if (!material) return;
     const main = new THREE.Color(color);
     material.uniforms.uBlue.value.copy(main);
-    material.uniforms.uDeep.value.copy(main).offsetHSL(-0.035, 0.06, -0.14);
+    material.uniforms.uDeep.value.copy(main).offsetHSL(-0.035, 0.07, -0.16);
+    material.uniforms.uCyan.value.copy(main).offsetHSL(-0.075, -0.08, 0.13);
+    material.uniforms.uViolet.value.copy(main).offsetHSL(0.11, -0.08, 0.18);
     material.uniforms.uIce.value.copy(main).lerp(new THREE.Color("#ffffff"), 0.72);
   }, [color]);
 
@@ -362,7 +446,7 @@ function ParticleField({
 
 export default function BlueBloomFirework({
   color = "#58b7ff",
-  particleCount = 26000,
+  particleCount = 32000,
   cycleDuration = 6,
   paused = false,
   restartSignal = 0,

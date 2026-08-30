@@ -50,7 +50,7 @@ export default function ParticleBloomShowcase() {
       >
         <BlueBloomFirework
           color={color}
-          particleCount={26000}
+          particleCount={32000}
           cycleDuration={6}
           paused={reducedMotion}
           restartSignal={restartSignal}
@@ -95,7 +95,7 @@ export default function ParticleBloomShowcase() {
       </header>
 
       <footer className="pointer-events-none absolute inset-x-0 bottom-16 z-20 flex items-end justify-between gap-6 p-5 font-mono text-[9px] uppercase leading-5 tracking-[0.15em] text-sky-100/32 sm:bottom-12 sm:p-8 sm:text-[10px]">
-        <p>26,000 deterministic sparks · DPR 2</p>
+        <p>32,000 layered sparks · filament + mist</p>
         <p className="text-right">Click anywhere to relaunch</p>
       </footer>
     </main>
