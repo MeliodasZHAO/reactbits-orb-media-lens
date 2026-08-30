@@ -11,6 +11,7 @@ export interface BlueBloomFireworkProps {
   cycleDuration?: number;
   paused?: boolean;
   restartSignal?: number;
+  onCanvasReady?: (canvas: HTMLCanvasElement) => void;
   className?: string;
 }
 
@@ -79,7 +80,7 @@ void main() {
   float travelAngle = PI * 0.5;
 
   vec3 bloomCenter = vec3(0.02, 0.12, 0.0);
-  vec2 launchStart = vec2(-0.46, -1.72);
+  vec2 launchStart = vec2(-0.46, -1.42);
   vec2 launchControlA = vec2(-0.61, -1.08);
   vec2 launchControlB = vec2(-0.24, -0.22);
   vec2 launchEnd = bloomCenter.xy;
@@ -110,7 +111,8 @@ void main() {
     );
     vec2 normalToPath = vec2(-tangent.y, tangent.x);
     float filament = floor(aSeedC * 3.0) - 1.0;
-    float braid = sin(pathProgress * 25.0 + filament * 2.1 + t * 5.2);
+    float cyclicDrift = sin(t / max(uCycle, 0.1) * TAU) * 1.3;
+    float braid = sin(pathProgress * 25.0 + filament * 2.1 + cyclicDrift);
     float width = (0.004 + tail * 0.034) * (0.58 + 0.42 * aSeedD);
     path += normalToPath * (
       filament * width * 0.54
@@ -118,16 +120,80 @@ void main() {
       + (aSeedB - 0.5) * width * 0.7
     );
     positionNow = vec3(path, (aSeedD - 0.5) * (0.035 + tail * 0.15));
-    alpha =
-      smoothstep(0.02, 0.12, t)
+    float trailOpacity = 0.16 + 0.84 * pow(1.0 - tail, 0.66);
+    float launchVisibility = mix(0.24, 1.0, smoothstep(0.0, 0.14, t));
+    alpha = launchVisibility
       * (1.0 - smoothstep(1.18, 1.52, t))
-      * (0.16 + 0.84 * pow(1.0 - tail, 0.66));
+      * trailOpacity;
+
+    // During the final beat, the last vapour condenses back into the exact
+    // position and opacity used at t=0. The modulo boundary is therefore a
+    // continuation, not a cut to an empty frame.
+    float seamStart = max(uCycle - 1.72, 0.1);
+    float seamProgress = smoothstep(seamStart, uCycle, t);
+    float returnSpread = sin(seamProgress * PI);
+    float returnPathProgress = saturate(
+      1.0 - seamProgress + (tail - 0.5) * returnSpread * 0.5
+    );
+    vec2 seamTangent = cubicBezierTangent(
+      launchStart,
+      launchControlA,
+      launchControlB,
+      launchEnd,
+      returnPathProgress
+    );
+    vec2 seamNormal = vec2(-seamTangent.y, seamTangent.x);
+    float seamBraid = sin(
+      returnPathProgress * 25.0 + filament * 2.1 + cyclicDrift
+    );
+    vec2 seamPosition = cubicBezier(
+      launchStart,
+      launchControlA,
+      launchControlB,
+      launchEnd,
+      returnPathProgress
+    ) + seamNormal * (
+      filament * width * 0.54
+      + seamBraid * width
+      + (aSeedB - 0.5) * width * 0.7
+    );
+    float returnAngle = aSeedB * TAU + seamProgress * 1.4;
+    float returnRadius = pow(aSeedC, 1.65) * returnSpread;
+    vec2 returnCloud = (
+      seamNormal * cos(returnAngle) * 0.23
+      + seamTangent * sin(returnAngle) * 0.12
+    ) * returnRadius;
+    float seamMix = smoothstep(seamStart, seamStart + 0.12, t);
+    positionNow = mix(
+      positionNow,
+      vec3(
+        seamPosition + returnCloud,
+        (aSeedD - 0.5) * (0.035 + tail * 0.15)
+      ),
+      seamMix
+    );
+    float seamAlpha = (
+      mix(0.08, 0.24, seamProgress)
+      + returnSpread * 0.32
+    ) * trailOpacity;
+    alpha = mix(alpha, seamAlpha, seamMix);
+    float boundaryBlend = max(
+      seamMix,
+      1.0 - smoothstep(0.0, 0.18, t)
+    );
     heat = 0.66 + (1.0 - tail) * 0.34;
-    twinkle = 0.92 + 0.08 * sin(t * 19.0 + aSeedB * 40.0);
+    twinkle = 0.92 + 0.08 * sin(
+      t / max(uCycle, 0.1) * TAU * 3.0 + aSeedB * 40.0
+    );
     tone = mix(0.2, 0.82, aSeedD);
-    softness = smoothstep(0.26, 0.0, aSeedD) * (0.46 + tail * 0.34);
-    streak = smoothstep(0.54, 1.0, aSeedD) * (0.5 + launchHead * 0.5);
-    travelAngle = atan(tangent.y, tangent.x);
+    softness = max(
+      smoothstep(0.26, 0.0, aSeedD) * (0.46 + tail * 0.34),
+      boundaryBlend * (0.42 + tail * 0.28)
+    );
+    streak = smoothstep(0.54, 1.0, aSeedD)
+      * mix(0.5 + launchHead * 0.5, 0.24, boundaryBlend);
+    vec2 visualTangent = normalize(mix(tangent, seamTangent, seamMix));
+    travelAngle = atan(visualTangent.y, visualTangent.x);
   } else if (aKind < 1.5) {
     // The moving head compresses into a bud while the inner petals are already
     // opening. This overlap removes the old launch / explosion phase break.
@@ -161,8 +227,8 @@ void main() {
     positionNow = mix(arrivingBud, openedBud, gather);
     float impactPulse = exp(-pow((t - 1.12) / 0.22, 2.0));
     positionNow.xy += lensAxis * impactPulse * (aSeedC - 0.5) * 0.035;
-    alpha = gather * (1.0 - release) * mix(0.9, 0.38, coreRound);
-    heat = 0.72 + 0.28 * (1.0 - aSeedB);
+    alpha = gather * (1.0 - release) * mix(0.68, 0.3, coreRound);
+    heat = 0.46 + 0.24 * (1.0 - aSeedB);
     twinkle = 0.94 + 0.06 * sin(t * 15.0 + aSeedD * 31.0);
     tone = mix(0.48, 0.92, aSeedC);
     softness = smoothstep(0.18, 0.0, aSeedD) * 0.7;
@@ -185,7 +251,7 @@ void main() {
     float spawn = 0.96 + aLayer * 0.38 + petalStagger + aSeedD * 0.065;
     float bloomAge = max(t - spawn, 0.0);
     float bloom = 1.0 - exp(
-      -bloomAge * mix(2.85, 1.82, aLayer)
+      -bloomAge * mix(2.4, 1.55, aLayer)
     );
     bloom = saturate(bloom);
     float bend =
@@ -245,7 +311,7 @@ void main() {
       (aSeedC - 0.5) * sin(along * PI) * mix(0.08, 0.72, bloom)
     );
 
-    float born = smoothstep(spawn - 0.035, spawn + 0.16, t);
+    float born = smoothstep(spawn - 0.035, spawn + 0.36, t);
     float dissolve = 1.0 - smoothstep(4.0 + aSeedD * 0.48, 5.9, t);
     alpha = born * dissolve * mix(0.34, 0.88, sin(along * PI));
     heat = 0.22 + (1.0 - along) * 0.68 + (1.0 - aLayer) * 0.1;
@@ -370,7 +436,12 @@ void main() {
     smoothstep(0.38, 0.86, vTone)
   );
   vec3 base = mix(blueFamily, spectralFamily, smoothstep(0.3, 0.82, vTone));
-  base = mix(base, uIce, core * (0.3 + vHeat * 0.7));
+  float earlyHighlight = mix(0.7, 1.0, smoothstep(1.45, 2.1, vKind));
+  base = mix(
+    base,
+    uIce,
+    core * (0.18 + vHeat * 0.54) * earlyHighlight
+  );
   base *= 0.98 + vTwinkle * 0.24;
 
   gl_FragColor = vec4(base * alpha, alpha);
@@ -532,6 +603,7 @@ export default function BlueBloomFirework({
   cycleDuration = 6,
   paused = false,
   restartSignal = 0,
+  onCanvasReady,
   className,
 }: BlueBloomFireworkProps) {
   return (
@@ -544,6 +616,7 @@ export default function BlueBloomFirework({
           antialias: false,
           powerPreference: "high-performance",
         }}
+        onCreated={({ gl }) => onCanvasReady?.(gl.domElement)}
       >
         <ParticleField
           color={color}

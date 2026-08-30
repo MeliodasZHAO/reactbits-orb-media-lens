@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState, useSyncExternalStore } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 
 const BlueBloomFirework = dynamic(
   () => import("@/components/blue-bloom-firework"),
@@ -32,6 +32,51 @@ export default function ParticleBloomShowcase() {
   );
   const [color, setColor] = useState("#58b7ff");
   const [restartSignal, setRestartSignal] = useState(0);
+  const [exporting, setExporting] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const exportWebM = () => {
+    const canvas = canvasRef.current;
+    if (!canvas || exporting || typeof MediaRecorder === "undefined") return;
+
+    const mimeType = [
+      "video/webm;codecs=vp9",
+      "video/webm;codecs=vp8",
+      "video/webm",
+    ].find((type) => MediaRecorder.isTypeSupported(type));
+    const stream = canvas.captureStream(60);
+    const chunks: Blob[] = [];
+    const recorder = new MediaRecorder(stream, {
+      ...(mimeType ? { mimeType } : {}),
+      videoBitsPerSecond: 14_000_000,
+    });
+
+    recorder.addEventListener("dataavailable", (event) => {
+      if (event.data.size > 0) chunks.push(event.data);
+    });
+    recorder.addEventListener("stop", () => {
+      const blob = new Blob(chunks, { type: mimeType ?? "video/webm" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "blue-lens-bloom-loop.webm";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+      stream.getTracks().forEach((track) => track.stop());
+      setExporting(false);
+    });
+
+    setExporting(true);
+    setRestartSignal((value) => value + 1);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        recorder.start(250);
+        window.setTimeout(() => recorder.stop(), 6_030);
+      });
+    });
+  };
 
   return (
     <main className="relative min-h-svh overflow-hidden bg-[#020713] text-white">
@@ -54,6 +99,9 @@ export default function ParticleBloomShowcase() {
           cycleDuration={6}
           paused={reducedMotion}
           restartSignal={restartSignal}
+          onCanvasReady={(canvas) => {
+            canvasRef.current = canvas;
+          }}
           className="absolute inset-0"
         />
       </section>
@@ -90,6 +138,14 @@ export default function ParticleBloomShowcase() {
             className="touch-manipulation rounded-full border border-white/10 bg-black/30 px-4 py-2 font-mono text-[9px] uppercase tracking-[0.14em] text-white/65 backdrop-blur-xl transition hover:border-sky-300/35 hover:text-white"
           >
             Replay
+          </button>
+          <button
+            type="button"
+            onClick={exportWebM}
+            disabled={exporting}
+            className="touch-manipulation rounded-full border border-sky-200/20 bg-sky-300/10 px-4 py-2 font-mono text-[9px] uppercase tracking-[0.14em] text-sky-50/80 backdrop-blur-xl transition hover:border-sky-200/40 hover:bg-sky-300/15 disabled:cursor-wait disabled:opacity-55"
+          >
+            {exporting ? "Exporting 6s" : "Export WebM"}
           </button>
         </div>
       </header>
