@@ -65,7 +65,6 @@ void main() {
   float loopAngle = cyclePhase * TAU;
   vec2 lensAxis = normalize(vec2(-0.62, -1.0));
   vec2 lensAcross = vec2(-lensAxis.y, lensAxis.x);
-  vec3 birthPoint = vec3(0.2, 0.22, 0.0);
   vec3 bloomCenter = vec3(-0.03, 0.015, 0.0);
   float globalBreath = 0.5 - 0.5 * cos(loopAngle);
 
@@ -76,16 +75,16 @@ void main() {
     float flow = fract(aSeed + cyclePhase * 0.22 + aLayer * 0.035);
     float flowAngle = flow * TAU;
     float filament = floor(aSeedC * 3.0) - 1.0;
-    float axial = 0.72 * cos(flowAngle) - 0.08 * cos(flowAngle * 2.0);
-    float lateral = 0.13 * sin(flowAngle)
-      + 0.035 * sin(flowAngle * 3.0 + loopAngle + filament * 1.7);
+    float axial = 0.43 * cos(flowAngle) - 0.035 * cos(flowAngle * 2.0);
+    float lateral = 0.075 * sin(flowAngle)
+      + 0.022 * sin(flowAngle * 3.0 + loopAngle + filament * 1.7);
     vec2 path = bloomCenter.xy
       - lensAxis * 0.03
       + lensAxis * axial
       + lensAcross * lateral;
     vec2 tangent = normalize(
-      lensAxis * (-0.72 * sin(flowAngle) + 0.16 * sin(flowAngle * 2.0))
-      + lensAcross * (0.13 * cos(flowAngle) + 0.105 * cos(flowAngle * 3.0 + loopAngle + filament * 1.7))
+      lensAxis * (-0.43 * sin(flowAngle) + 0.07 * sin(flowAngle * 2.0))
+      + lensAcross * (0.075 * cos(flowAngle) + 0.066 * cos(flowAngle * 3.0 + loopAngle + filament * 1.7))
       + vec2(0.0001)
     );
     vec2 normalToPath = vec2(-tangent.y, tangent.x);
@@ -97,7 +96,7 @@ void main() {
       + (aSeedB - 0.5) * width * 0.62
     );
     positionNow = vec3(path, (aSeedD - 0.5) * (0.05 + 0.08 * globalBreath));
-    alpha = (0.13 + 0.34 * pow(0.5 + 0.5 * cos(flowAngle), 1.8))
+    alpha = (0.08 + 0.22 * pow(0.5 + 0.5 * cos(flowAngle), 1.8))
       * (0.78 + 0.22 * globalBreath);
     heat = 0.56 + 0.34 * (0.5 + 0.5 * cos(flowAngle));
     twinkle = 0.92 + 0.08 * sin(loopAngle * 3.0 + aSeedB * 40.0);
@@ -144,14 +143,14 @@ void main() {
     float along = pow(aSeedB, mix(0.52, 0.68, aLayer));
 
     float phaseOffset = aLayer * 0.52 + fract(petalIndex * 0.381966) * 0.1;
-    float petalWave = 0.5 - 0.5 * cos(loopAngle - phaseOffset);
-    float bloom = 0.34 + 0.66 * pow(petalWave, 0.7);
+    float petalWave = sin(loopAngle - phaseOffset);
+    float bloom = 0.955 + 0.035 * petalWave;
     float innerRenewal = (1.0 - middleLayer)
       * (0.5 + 0.5 * sin(loopAngle * 2.0 + petalIndex * 0.42));
-    bloom = saturate(bloom + innerRenewal * 0.055);
-    float centreTransfer = 0.22 + 0.78 * smoothstep(0.42, 0.82, bloom);
-    vec3 livingCenter = mix(birthPoint, bloomCenter, centreTransfer);
-    livingCenter.xy += lensAxis * bloom * 0.12;
+    bloom += innerRenewal * 0.012;
+    vec3 livingCenter = bloomCenter;
+    livingCenter.xy += lensAxis
+      * (0.008 + 0.01 * sin(loopAngle + aLayer * 2.4));
 
     float petalAngle = PI * 0.58
       + petalIndex * TAU / petalCount
@@ -165,9 +164,9 @@ void main() {
       0.075 * sin(loopAngle + aLayer * 1.7)
       + 0.026 * sin(loopAngle * 2.0 - along * 2.4)
     );
-    float openingShear = (1.0 - bloom)
+    float openingShear = (0.98 - bloom)
       * handedness
-      * mix(0.36, 0.16, smoothstep(0.0, 2.0, layerBand))
+      * mix(0.18, 0.08, smoothstep(0.0, 2.0, layerBand))
       * sin(along * PI);
     float spiralSweep = along
       * handedness
@@ -194,9 +193,9 @@ void main() {
     float radius = (
       0.055
       + along
-        * mix(0.66, 1.35, smoothstep(0.0, 2.0, layerBand))
+        * mix(0.58, 1.06, smoothstep(0.0, 2.0, layerBand))
         * petalVariation
-        * mix(0.76, 1.34, lowerLeftWeight)
+        * mix(0.84, 1.18, lowerLeftWeight)
     ) * bloom * breath;
     float petalWidth = (aSeedC - 0.5)
       * sin(along * PI)
@@ -212,7 +211,9 @@ void main() {
     // Only a thin outer family reaches back into the upper-right distortion
     // zone. The lens stretches these tips while the main flower stays centred.
     float rimFamily = outerLayer * smoothstep(0.72, 1.0, along) * upperRightWeight;
-    float rimExtension = rimFamily * (0.38 + 0.48 * bloom + aSeedD * 0.16);
+    float rimExtension = rimFamily * (
+      0.24 + aSeedD * 0.08 + 0.025 * sin(loopAngle * 2.0 + petalIndex)
+    );
     petal += (-lensAxis) * rimExtension;
     petal += lensAcross
       * rimFamily
@@ -232,8 +233,8 @@ void main() {
         * sin(along * PI)
         * mix(0.02, 0.07, smoothstep(0.0, 2.0, layerBand))
     );
-    alpha = mix(0.24, 0.84, sin(along * PI))
-      * (0.5 + 0.5 * bloom)
+    alpha = mix(0.2, 0.69, sin(along * PI))
+      * (0.88 + 0.12 * bloom)
       * mix(1.0, 1.08, rimFamily);
     heat = 0.24 + (1.0 - along) * 0.62 + (1.0 - aLayer) * 0.12;
     twinkle = 0.91 + 0.09 * sin(loopAngle * 4.0 + aSeedC * 47.0 + aLayer * 3.0);
@@ -258,13 +259,12 @@ void main() {
     float angle = mix(radialAngle, biasedAngle, 0.58 + aLayer * 0.18);
     angle = mix(angle, rimAngle, rimMist);
     vec2 direction = vec2(cos(angle), sin(angle));
-    float mistWave = 0.5 - 0.5 * cos(loopAngle - aLayer * 0.7 - aSeedB * 0.12);
-    float mistBloom = 0.38 + 0.62 * pow(mistWave, 0.78);
+    float mistWave = sin(loopAngle - aLayer * 0.7 - aSeedB * 0.12);
+    float mistBloom = 0.95 + 0.035 * mistWave;
     float radius = (0.28 + aSeedC * 0.72 + aLayer * 0.3) * mistBloom;
     radius += rimMist * (0.32 + aSeedB * 0.26) * mistBloom;
-    float mistTransfer = 0.18 + 0.82 * smoothstep(0.46, 0.84, mistBloom);
-    vec3 mistCenter = mix(birthPoint, bloomCenter, mistTransfer);
-    mistCenter.xy += lensAxis * mistBloom * 0.12;
+    vec3 mistCenter = bloomCenter;
+    mistCenter.xy += lensAxis * (0.012 + 0.008 * sin(loopAngle + aLayer));
     positionNow = mistCenter + vec3(
       direction.x * radius
         + lensAcross.x * sin(loopAngle * 2.0 + aSeedD * 15.0) * 0.035,
@@ -272,8 +272,8 @@ void main() {
         + lensAcross.y * sin(loopAngle * 2.0 + aSeedD * 15.0) * 0.035,
       (aSeedB - 0.5) * radius * 0.52
     );
-    alpha = (0.12 + aSeedC * 0.36)
-      * (0.48 + 0.52 * mistBloom)
+    alpha = (0.09 + aSeedC * 0.27)
+      * (0.9 + 0.1 * mistBloom)
       * mix(1.0, 0.64, rimMist);
     heat = 0.14 + (1.0 - aSeedC) * 0.34;
     twinkle = 0.88 + 0.12 * sin(loopAngle * 4.0 + aSeedD * 53.0);
@@ -348,11 +348,11 @@ void main() {
     exp(-distanceFromCenter * distanceFromCenter * 2.25)
     * (1.0 - smoothstep(0.76, 1.0, distanceFromCenter));
   float sparkShape = body * 0.78 + halo * 0.2;
-  float surfaceSoftness = max(vSoftness, uLightSurface * 0.2);
+  float surfaceSoftness = max(vSoftness, uLightSurface * 0.5);
   float shape = mix(sparkShape, mistShape * 0.58, surfaceSoftness);
   shape = mix(shape, streakShape * 0.84 + halo * 0.08, vStreak);
   float alpha = shape * vAlpha * mix(1.0, 0.42, surfaceSoftness);
-  alpha *= mix(1.0, 0.82, uLightSurface);
+  alpha *= mix(1.0, 0.0, uLightSurface);
 
   vec3 blueFamily = mix(uDeep, uBlue, smoothstep(0.0, 0.46, vTone));
   vec3 spectralFamily = mix(
@@ -370,6 +370,145 @@ void main() {
   base *= 0.98 + vTwinkle * 0.24;
 
   vec3 outputColor = mix(base * alpha, base, uLightSurface);
+  gl_FragColor = vec4(outputColor, alpha);
+}
+`;
+
+const veilVertexShader = `
+precision highp float;
+
+varying vec2 vUv;
+
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`;
+
+const veilFragmentShader = `
+precision highp float;
+
+uniform float uTime;
+uniform float uCycle;
+uniform float uLightSurface;
+uniform vec3 uSky;
+uniform vec3 uMint;
+uniform vec3 uLavender;
+uniform vec3 uPearl;
+
+varying vec2 vUv;
+
+const float TAU = 6.28318530718;
+
+float hash21(vec2 p) {
+  p = fract(p * vec2(123.34, 456.21));
+  p += dot(p, p + 45.32);
+  return fract(p.x * p.y);
+}
+
+float noise2(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(
+    mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x),
+    mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0)), f.x),
+    f.y
+  );
+}
+
+float fbm(vec2 p) {
+  float value = 0.0;
+  float amplitude = 0.5;
+  mat2 octaveRotation = mat2(0.82, -0.57, 0.57, 0.82);
+  for (int octave = 0; octave < 4; octave += 1) {
+    value += noise2(p) * amplitude;
+    p = octaveRotation * p * 2.03 + 17.17;
+    amplitude *= 0.5;
+  }
+  return value;
+}
+
+void main() {
+  float phase = mod(uTime, max(uCycle, 0.1)) / max(uCycle, 0.1);
+  float loopAngle = phase * TAU;
+  vec2 circularTime = vec2(cos(loopAngle), sin(loopAngle));
+  vec2 p = (vUv - 0.5) * 2.0;
+  p.x *= 0.94;
+  p.y += 0.015;
+
+  float angle = atan(p.y, p.x);
+  float radius = length(p);
+  vec2 lowerLeftAxis = normalize(vec2(-0.62, -1.0));
+  float directionalWeight = dot(normalize(p + vec2(0.0001)), lowerLeftAxis);
+
+  // The silhouette is intentionally almost static. Motion is limited to a
+  // very small edge breath while the fluid field moves inside it.
+  float fixedContour = 0.57
+    + 0.052 * sin(angle * 3.0 + 0.42)
+    + 0.031 * sin(angle * 5.0 - 1.28)
+    + 0.018 * sin(angle * 8.0 + 0.8)
+    + 0.07 * max(directionalWeight, 0.0)
+    + 0.018 * max(-directionalWeight, 0.0);
+  float edgeFlow = fbm(vec2(angle * 1.3, radius * 3.1) + circularTime * 0.16);
+  fixedContour += (edgeFlow - 0.5) * 0.018;
+  fixedContour += 0.008 * sin(loopAngle * 2.0 + angle * 6.0);
+
+  float signedBody = fixedContour - radius;
+  float bodyMask = smoothstep(-0.085, 0.055, signedBody);
+  float innerMask = smoothstep(-0.015, 0.13, signedBody);
+  float feather = smoothstep(-0.13, 0.08, signedBody);
+
+  vec2 q = p * 1.72;
+  vec2 advectA = circularTime * 0.28;
+  vec2 advectB = vec2(-circularTime.y, circularTime.x) * 0.21;
+  float flowA = fbm(q * 1.45 + advectA);
+  float flowB = fbm(mat2(0.73, -0.68, 0.68, 0.73) * q * 2.2 - advectB);
+  float flowC = fbm(q * 3.25 + vec2(flowB, flowA) * 0.72 + circularTime * 0.12);
+  float ribbon = 0.5 + 0.5 * sin(
+    q.x * 4.6 - q.y * 2.1 + flowA * 5.2 + flowB * 2.0 + loopAngle
+  );
+  float softRibbon = smoothstep(0.18, 0.88, ribbon);
+  float pearlThread = pow(
+    smoothstep(0.58, 0.96, 0.5 + 0.5 * sin(q.y * 6.2 + flowC * 6.0 - loopAngle * 1.4)),
+    1.6
+  );
+
+  vec3 color = mix(uSky, uMint, smoothstep(0.2, 0.82, flowA));
+  color = mix(color, uLavender, smoothstep(0.5, 0.9, flowB) * 0.74);
+  float silkLine = pow(
+    smoothstep(0.52, 0.94, 0.5 + 0.5 * sin(q.x * 5.1 + q.y * 2.7 + flowC * 4.2 - loopAngle)),
+    2.4
+  );
+  color = mix(color, uMint, silkLine * 0.13);
+  color = mix(color, uLavender, softRibbon * 0.065);
+  float causticA = pow(
+    0.5 + 0.5 * sin(q.x * 7.2 - q.y * 3.4 + flowA * 6.1 + loopAngle * 1.35),
+    9.0
+  );
+  float causticB = pow(
+    0.5 + 0.5 * sin(q.y * 8.4 + q.x * 2.15 + flowB * 5.4 - loopAngle * 1.1),
+    12.0
+  );
+  vec3 causticShade = mix(uMint, uLavender, 0.55);
+  color = mix(color, causticShade, causticA * 0.32);
+  color = mix(color, uPearl, causticB * 0.3);
+  color = mix(color, uSky, smoothstep(0.76, 1.0, radius) * 0.18);
+
+  float innerDepth = 0.76 + flowC * 0.24;
+  float movingLight = 0.86 + 0.14 * sin(loopAngle + flowA * 3.5 - q.x * 0.8);
+  vec3 shadedColor = color * innerDepth * movingLight;
+  vec3 airyColor = color;
+  color = mix(shadedColor, airyColor, uLightSurface);
+  color = mix(color, uPearl, pearlThread * 0.022);
+
+  float alpha = bodyMask
+    * (0.47 + (flowA - 0.5) * 0.035 + softRibbon * 0.025)
+    * mix(0.94, 1.24, uLightSurface);
+  alpha += feather * (1.0 - innerMask) * 0.045;
+  if (alpha <= 0.002) discard;
+
+  vec3 outputColor = mix(color * alpha, color, uLightSurface);
   gl_FragColor = vec4(outputColor, alpha);
 }
 `;
@@ -392,6 +531,74 @@ interface ParticleFieldProps {
   cycleDuration: number;
   paused: boolean;
   restartSignal: number;
+}
+
+function ContinuousBloom({
+  color,
+  lightSurface,
+  cycleDuration,
+  paused,
+  restartSignal,
+}: Omit<ParticleFieldProps, "count">) {
+  const materialRef = useRef<THREE.ShaderMaterial>(null);
+  const elapsedRef = useRef(0);
+
+  const uniforms = useMemo(() => ({
+    uTime: { value: 0 },
+    uCycle: { value: cycleDuration },
+    uLightSurface: { value: lightSurface ? 1 : 0 },
+    uSky: { value: new THREE.Color(color) },
+    uMint: { value: new THREE.Color("#a9e8df") },
+    uLavender: { value: new THREE.Color("#d2ccef") },
+    uPearl: { value: new THREE.Color("#f7fcff") },
+  }), [color, cycleDuration, lightSurface]);
+
+  useEffect(() => {
+    elapsedRef.current = 0;
+  }, [restartSignal]);
+
+  useEffect(() => {
+    const material = materialRef.current;
+    if (!material) return;
+    const main = new THREE.Color(color);
+    if (lightSurface) {
+      material.uniforms.uSky.value.copy(main).lerp(new THREE.Color("#e8f8ff"), 0.48);
+      material.uniforms.uMint.value.copy(main).lerp(new THREE.Color("#c8f1e8"), 0.84);
+      material.uniforms.uLavender.value.copy(main).lerp(new THREE.Color("#e0dcf3"), 0.86);
+      material.uniforms.uPearl.value.set("#dff3f9");
+    } else {
+      material.uniforms.uSky.value.copy(main).offsetHSL(-0.015, -0.08, 0.06);
+      material.uniforms.uMint.value.copy(main).lerp(new THREE.Color("#75e5d2"), 0.58);
+      material.uniforms.uLavender.value.copy(main).lerp(new THREE.Color("#b7a8ee"), 0.58);
+      material.uniforms.uPearl.value.copy(main).lerp(new THREE.Color("#ffffff"), 0.82);
+    }
+    material.uniforms.uLightSurface.value = lightSurface ? 1 : 0;
+  }, [color, lightSurface]);
+
+  useFrame((_, delta) => {
+    const material = materialRef.current;
+    if (!material) return;
+    if (!paused) elapsedRef.current += Math.min(delta, 0.05);
+    material.uniforms.uTime.value = paused ? 3.55 : elapsedRef.current;
+    material.uniforms.uCycle.value = cycleDuration;
+  });
+
+  return (
+    <mesh position={[-0.03, 0.015, -0.48]} scale={[3.08, 3.08, 1]} renderOrder={0}>
+      <planeGeometry args={[1, 1, 1, 1]} />
+      <shaderMaterial
+        ref={materialRef}
+        vertexShader={veilVertexShader}
+        fragmentShader={veilFragmentShader}
+        uniforms={uniforms}
+        transparent
+        depthWrite={false}
+        depthTest={false}
+        blending={lightSurface ? THREE.NormalBlending : THREE.AdditiveBlending}
+        toneMapped={false}
+      />
+    </mesh>
+  );
 }
 
 function ParticleField({
@@ -489,11 +696,11 @@ function ParticleField({
     if (!material) return;
     const main = new THREE.Color(color);
     if (lightSurface) {
-      material.uniforms.uBlue.value.copy(main).lerp(new THREE.Color("#eaf8ff"), 0.16);
-      material.uniforms.uDeep.value.copy(main).lerp(new THREE.Color("#8accea"), 0.48);
-      material.uniforms.uCyan.value.copy(main).lerp(new THREE.Color("#c9f5f4"), 0.62);
-      material.uniforms.uViolet.value.copy(main).lerp(new THREE.Color("#d8d7f4"), 0.7);
-      material.uniforms.uIce.value.set("#f6fcff");
+      material.uniforms.uBlue.value.copy(main).lerp(new THREE.Color("#eefaff"), 0.68);
+      material.uniforms.uDeep.value.copy(main).lerp(new THREE.Color("#d3ebf2"), 0.84);
+      material.uniforms.uCyan.value.copy(main).lerp(new THREE.Color("#d4f4ec"), 0.9);
+      material.uniforms.uViolet.value.copy(main).lerp(new THREE.Color("#e7e3f6"), 0.92);
+      material.uniforms.uIce.value.set("#f9fdff");
     } else {
       material.uniforms.uBlue.value.copy(main);
       material.uniforms.uDeep.value.copy(main).offsetHSL(-0.035, 0.07, -0.16);
@@ -519,7 +726,7 @@ function ParticleField({
   });
 
   return (
-    <points ref={pointsRef} geometry={geometry} frustumCulled={false}>
+    <points ref={pointsRef} geometry={geometry} frustumCulled={false} renderOrder={1}>
       <shaderMaterial
         ref={materialRef}
         vertexShader={vertexShader}
@@ -536,7 +743,7 @@ function ParticleField({
 }
 
 export default function BlueBloomFirework({
-  color = "#58b7ff",
+  color = "#b4e3f5",
   backgroundColor,
   lightSurface = false,
   particleCount = 32000,
@@ -559,14 +766,23 @@ export default function BlueBloomFirework({
         onCreated={({ gl }) => onCanvasReady?.(gl.domElement)}
       >
         {backgroundColor ? <color attach="background" args={[backgroundColor]} /> : null}
-        <ParticleField
+        <ContinuousBloom
           color={color}
           lightSurface={lightSurface}
-          count={particleCount}
           cycleDuration={cycleDuration}
           paused={paused}
           restartSignal={restartSignal}
         />
+        {!lightSurface ? (
+          <ParticleField
+            color={color}
+            lightSurface={false}
+            count={particleCount}
+            cycleDuration={cycleDuration}
+            paused={paused}
+            restartSignal={restartSignal}
+          />
+        ) : null}
       </Canvas>
     </div>
   );

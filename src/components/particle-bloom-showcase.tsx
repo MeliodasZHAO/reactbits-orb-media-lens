@@ -35,7 +35,7 @@ export default function ParticleBloomShowcase() {
     readReducedMotion,
     () => false,
   );
-  const [color, setColor] = useState("#58b7ff");
+  const [color, setColor] = useState("#b4e3f5");
   const [restartSignal, setRestartSignal] = useState(0);
   const [exporting, setExporting] = useState(false);
   const [lensPreview, setLensPreview] = useState(false);
@@ -119,7 +119,7 @@ export default function ParticleBloomShowcase() {
           restartSignal={restartSignal}
           onCanvasReady={(canvas) => {
             canvasRef.current = canvas;
-            setSourceCanvas((current) => current ?? canvas);
+            setSourceCanvas((current) => current === canvas ? current : canvas);
           }}
           className={`absolute inset-0 transition-opacity duration-500 ${
             lensPreview ? "opacity-0" : "opacity-100"
@@ -160,7 +160,7 @@ export default function ParticleBloomShowcase() {
           <p className={`font-mono text-[9px] uppercase tracking-[0.22em] sm:text-[10px] ${
             lensPreview ? "text-[#165c83]/55" : "text-sky-100/42"
           }`}>
-            GPU particle study · 06 seconds
+            GPU fluid study · 06 seconds
           </p>
           <h1 className="mt-2 text-lg font-medium tracking-[-0.035em] sm:text-xl">
             Lensborne blue bloom
@@ -171,7 +171,7 @@ export default function ParticleBloomShowcase() {
           <label className="flex cursor-pointer items-center gap-2 rounded-full border border-white/10 bg-black/30 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.14em] text-white/65 backdrop-blur-xl">
             Blue
             <span
-              className="relative size-5 overflow-hidden rounded-full border border-white/20 shadow-[0_0_18px_rgba(88,183,255,.5)]"
+              className="relative size-5 overflow-hidden rounded-full border border-white/20 shadow-[0_0_18px_rgba(180,227,245,.5)]"
               style={{ backgroundColor: color }}
             >
               <input
@@ -215,7 +215,7 @@ export default function ParticleBloomShowcase() {
       <footer className={`pointer-events-none absolute inset-x-0 bottom-16 z-20 flex items-end justify-between gap-6 p-5 font-mono text-[9px] uppercase leading-5 tracking-[0.15em] sm:bottom-12 sm:p-8 sm:text-[10px] ${
         lensPreview ? "text-[#165c83]/46" : "text-sky-100/32"
       }`}>
-        <p>32,000 layered particles · directional corona + mist</p>
+        <p>Continuous fluid field · pastel caustics + micro detail</p>
         <p className="text-right">
           {lensPreview ? "Live canvas texture · click lens for ripple" : "Click anywhere to restart cycle"}
         </p>
