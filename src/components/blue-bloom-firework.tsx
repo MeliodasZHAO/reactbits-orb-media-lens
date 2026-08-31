@@ -17,76 +17,24 @@ export interface BlueBloomFireworkProps {
   className?: string;
 }
 
-const vertexShader = `
-precision highp float;
+const PETAL_COUNT = 14;
 
-varying vec2 vUv;
-
-void main() {
-  vUv = uv;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-}
-`;
-
-const fragmentShader = `
+const petalVertexShader = `
 precision highp float;
 
 uniform float uTime;
 uniform float uCycle;
-uniform vec3 uSky;
-uniform vec3 uMint;
-uniform vec3 uLavender;
-uniform vec3 uIce;
-uniform vec3 uAccent;
+uniform float uIndex;
+uniform float uCount;
 
-varying vec2 vUv;
+varying vec3 vWorldPosition;
+varying float vProgress;
+varying float vSide;
+varying float vDepth;
+varying float vEnergy;
 
+const float PI = 3.14159265359;
 const float TAU = 6.28318530718;
-
-mat2 rotate2d(float angle) {
-  float s = sin(angle);
-  float c = cos(angle);
-  return mat2(c, -s, s, c);
-}
-
-float hash21(vec2 p) {
-  p = fract(p * vec2(123.34, 456.21));
-  p += dot(p, p + 45.32);
-  return fract(p.x * p.y);
-}
-
-float noise2(vec2 p) {
-  vec2 cell = floor(p);
-  vec2 local = fract(p);
-  local = local * local * (3.0 - 2.0 * local);
-  return mix(
-    mix(hash21(cell), hash21(cell + vec2(1.0, 0.0)), local.x),
-    mix(hash21(cell + vec2(0.0, 1.0)), hash21(cell + vec2(1.0)), local.x),
-    local.y
-  );
-}
-
-float fbm(vec2 p) {
-  float value = 0.0;
-  float amplitude = 0.5;
-  mat2 octaveRotation = mat2(0.8, -0.6, 0.6, 0.8);
-  for (int octave = 0; octave < 5; octave += 1) {
-    value += noise2(p) * amplitude;
-    p = octaveRotation * p * 2.04 + 13.7;
-    amplitude *= 0.5;
-  }
-  return value;
-}
-
-float ellipseDistance(vec2 p, vec2 center, vec2 radii, float rotation) {
-  vec2 q = rotate2d(rotation) * (p - center);
-  return length(q / radii) - 1.0;
-}
-
-float smoothUnion(float a, float b, float softness) {
-  float h = clamp(0.5 + 0.5 * (b - a) / softness, 0.0, 1.0);
-  return mix(b, a, h) - softness * h * (1.0 - h);
-}
 
 float smoother(float value) {
   value = clamp(value, 0.0, 1.0);
@@ -94,205 +42,260 @@ float smoother(float value) {
 }
 
 float poweredBloom(float phase) {
-  // Slow preload, fast release, weighted suspension, controlled recovery.
-  // Frame zero and frame six land on the same composed posture.
-  if (phase < 0.17) {
-    return mix(0.24, 0.3, smoother(phase / 0.17));
+  if (phase < 0.16) {
+    return mix(0.28, 0.33, smoother(phase / 0.16));
   }
-  if (phase < 0.38) {
-    float release = (phase - 0.17) / 0.21;
-    return mix(0.3, 1.0, 1.0 - pow(1.0 - release, 3.4));
+  if (phase < 0.34) {
+    float release = (phase - 0.16) / 0.18;
+    return mix(0.33, 1.0, 1.0 - pow(1.0 - release, 3.8));
   }
-  if (phase < 0.7) {
-    float suspension = (phase - 0.38) / 0.32;
-    return 1.0 - 0.045 * smoother(suspension);
+  if (phase < 0.68) {
+    float suspension = (phase - 0.34) / 0.34;
+    return 1.0 - 0.035 * smoother(suspension);
   }
-  float recovery = (phase - 0.7) / 0.3;
-  return mix(0.955, 0.24, smoother(recovery));
+  float recoil = (phase - 0.68) / 0.32;
+  return mix(0.965, 0.28, smoother(recoil));
 }
 
 void main() {
   float phase = mod(uTime, max(uCycle, 0.1)) / max(uCycle, 0.1);
   float loopAngle = phase * TAU;
   float bloom = poweredBloom(phase);
-  vec2 loopVector = vec2(cos(loopAngle), sin(loopAngle));
+  float t = uv.x;
+  float side = (uv.y - 0.5) * 2.0;
+  float layer = mod(uIndex, 2.0);
+  float ringIndex = floor(uIndex * 0.5);
+  float theta = (ringIndex / (uCount * 0.5)) * TAU
+    + layer * 0.39
+    + 0.31
+    + sin(loopAngle) * 0.045;
+  float depth = 0.5 + 0.5 * sin(theta);
+  float spread = mix(0.2, 1.0, bloom);
 
-  vec2 p = (vUv - 0.5) * 2.0;
-  p.x *= 1.03;
-  p.y += 0.015;
+  vec3 root = vec3(0.14, 0.1, -0.02);
+  vec3 axis = normalize(vec3(-0.72, -0.6, -0.34));
+  vec3 across = normalize(vec3(0.58, -0.81, 0.0));
+  vec3 forward = normalize(cross(axis, across));
 
-  // One posture governs everything: upper-right origin to lower-left release.
-  // Broad connected lobes read as an abstract bloom, never as tentacles.
-  vec2 axis = normalize(vec2(-1.0, -0.72));
-  vec2 across = vec2(-axis.y, axis.x);
-  vec2 origin = -axis * 0.36 + across * 0.015;
-  float spread = mix(0.68, 1.14, bloom);
-  float bodyBreath = 0.985 + 0.018 * sin(loopAngle - 0.45);
-
-  float body = ellipseDistance(
-    p,
-    origin + axis * (0.3 + 0.045 * bloom),
-    vec2(0.55, 0.22) * bodyBreath,
-    -0.62
+  vec3 radialDirection = normalize(
+    axis * cos(theta)
+      + across * sin(theta) * 0.84
+      + forward * sin(theta) * 0.18
   );
-  float crown = ellipseDistance(
-    p,
-    origin - axis * 0.015 + across * 0.045,
-    vec2(0.28, 0.16) * (0.97 + 0.025 * bloom),
-    -0.62
+  float lowerLeftBias = 0.5 + 0.5 * cos(theta);
+  vec3 openDirection = normalize(
+    radialDirection + axis * 0.12 * lowerLeftBias
   );
-  float lowerPetal = ellipseDistance(
-    p,
-    origin + axis * (0.51 * spread) + across * (0.035 + 0.105 * bloom),
-    vec2(0.31, 0.15) * (0.91 + 0.12 * bloom),
-    -0.72
+  vec3 closedDirection = normalize(
+    openDirection * 0.58 + forward * (0.86 - depth * 0.16)
   );
-  float petalBridge = ellipseDistance(
-    p,
-    origin + axis * (0.42 * spread) + across * (0.02 + 0.05 * bloom),
-    vec2(0.34, 0.18) * (0.95 + 0.06 * bloom),
-    -0.68
+  vec3 petalDirection = normalize(mix(
+    closedDirection,
+    openDirection,
+    smoother(bloom)
+  ));
+  float lengthVariation = (0.47
+    + lowerLeftBias * 0.34
+    + 0.045 * sin(uIndex * 2.17)
+    + 0.025 * cos(uIndex * 1.31))
+    * mix(1.0, 0.76, layer);
+  float petalLength = lengthVariation * mix(0.86, 1.0, bloom);
+
+  float releaseEnergy = smoothstep(0.13, 0.2, phase)
+    * (1.0 - smoothstep(0.36, 0.5, phase));
+  float releaseFront = mix(-0.08, 1.08, bloom);
+  float travellingForce = exp(-pow(t - releaseFront, 2.0) * 72.0)
+    * releaseEnergy;
+
+  vec3 centerline = root + petalDirection * petalLength * t;
+  centerline += forward
+    * sin(PI * t)
+    * (0.025 + 0.045 * spread)
+    * (0.72 + 0.28 * sin(theta * 2.0));
+  centerline += forward
+    * sin(PI * t)
+    * (0.035 * sin(loopAngle + theta) + travellingForce * 0.075);
+  vec3 tangentSide = normalize(
+    -axis * sin(theta) + across * cos(theta) * 0.84
   );
-  float shape = smoothUnion(body, crown, 0.17);
-  shape = smoothUnion(shape, petalBridge, 0.21);
-  shape = smoothUnion(shape, lowerPetal, 0.195);
+  centerline += tangentSide
+    * smoothstep(0.62, 1.0, t)
+    * sin(loopAngle + theta * 1.7)
+    * mix(0.014, 0.026, bloom);
+  float petalBody = pow(max(sin(PI * t), 0.0), 0.68);
+  float petalWidth = (0.006 + petalBody * (0.125 + depth * 0.028))
+    * mix(1.0, 0.86, layer)
+    * mix(0.9, 1.0, bloom);
+  float cup = (1.0 - side * side) * sin(PI * t);
 
-  float along = dot(p - origin, axis);
-  float lateral = dot(p - origin, across);
-  float releaseFront = mix(0.08, 0.98, bloom);
-  float releaseWave = exp(-pow(along - releaseFront, 2.0) * 92.0)
-    * exp(-lateral * lateral * 3.4);
-  shape -= releaseWave * (0.008 + bloom * 0.018);
-  float edgeMotion = (
-    fbm(vec2(atan(p.y, p.x) * 1.7, length(p) * 4.0) + loopVector * 0.16)
-    - 0.5
-  ) * 0.018;
-  shape += edgeMotion;
+  vec3 displaced = centerline + tangentSide * side * petalWidth;
+  float cupDepth = mix(0.13, 0.052, bloom) + depth * 0.034;
+  displaced += forward
+    * cup
+    * (cupDepth + travellingForce * 0.045);
+  displaced += radialDirection
+    * travellingForce
+    * (1.0 - side * side)
+    * 0.055;
+  displaced += forward
+    * sin(t * 34.0 - loopAngle * 1.15 + theta)
+    * petalBody
+    * (1.0 - side * side)
+    * 0.006;
 
-  float bodyMask = smoothstep(0.035, -0.025, shape);
-  float softEdge = smoothstep(0.13, -0.04, shape);
-  float innerDepth = smoothstep(0.03, -0.46, shape);
-  if (softEdge <= 0.001) discard;
-
-  // The release accelerates down-left. The silhouette remains composed while
-  // moving folds, hue and caustics carry the action.
-  vec2 flowPoint = vec2(along, lateral);
-  float drive = bloom * bloom * (3.0 - 2.0 * bloom);
-  vec2 advect = axis * (drive * 0.24) + across * sin(loopAngle) * 0.04;
-  float flowA = fbm(flowPoint * vec2(3.3, 5.1) + advect + loopVector * 0.18);
-  float flowB = fbm(
-    rotate2d(-0.72) * flowPoint * vec2(4.6, 3.5)
-    + vec2(flowA * 0.85, -flowA * 0.55)
-    - loopVector.yx * 0.16
-  );
-  float flowC = fbm(
-    flowPoint * vec2(7.2, 8.6)
-    + vec2(flowB, flowA) * 1.1
-    + loopVector * 0.11
-  );
-
-  float longFold = sin(
-    lateral * 14.0 - along * 4.2 + flowA * 5.4 - drive * 5.2
-  );
-  float crossFold = sin(
-    lateral * 6.4 + along * 10.5 + flowB * 4.6 + loopAngle * 0.7
-  );
-  float vein = pow(1.0 - abs(longFold), 9.0);
-  float crossVein = pow(1.0 - abs(crossFold), 13.0);
-  float wideSilk = smoothstep(-0.52, 0.72, longFold);
-
-  vec3 color = mix(uSky, uMint, smoothstep(0.18, 0.82, flowA));
-  color = mix(color, uLavender, smoothstep(0.56, 0.9, flowB) * 0.72);
-  color = mix(color, uAccent, wideSilk * 0.16 + innerDepth * 0.07);
-  color = mix(color, uIce, vein * 0.5 + crossVein * 0.24);
-
-  // The origin highlight and trailing sheen make the diagonal readable on a
-  // still frame, before any animation is seen.
-  float sourceGlow = exp(-dot(p - origin, p - origin) * 12.0);
-  float trailingSheen = smoothstep(-0.1, 0.72, along)
-    * smoothstep(0.62, 0.04, abs(lateral + 0.05));
-  color = mix(color, uIce, sourceGlow * 0.34);
-  color = mix(color, uMint, trailingSheen * (0.08 + bloom * 0.08));
-  color = mix(color, uIce, releaseWave * (0.18 + 0.2 * bloom));
-
-  float relief = 0.94 + innerDepth * 0.075 + (flowC - 0.5) * 0.045;
-  color *= relief;
-  color = mix(color, uIce, max(0.0, -shape) * vein * 0.13);
-
-  float alpha = bodyMask * (0.91 + innerDepth * 0.07);
-  alpha += (softEdge - bodyMask) * 0.34;
-  gl_FragColor = vec4(color, clamp(alpha, 0.0, 1.0));
+  vec4 worldPosition = modelMatrix * vec4(displaced, 1.0);
+  vWorldPosition = worldPosition.xyz;
+  vProgress = t;
+  vSide = side;
+  vDepth = depth;
+  vEnergy = travellingForce;
+  gl_Position = projectionMatrix * viewMatrix * worldPosition;
 }
 `;
 
-interface DirectionalBloomProps {
+const petalFragmentShader = `
+precision highp float;
+
+uniform vec3 uSky;
+uniform vec3 uMint;
+uniform vec3 uLavender;
+uniform vec3 uIce;
+uniform vec3 uAccent;
+uniform float uIndex;
+uniform float uTime;
+uniform float uCycle;
+
+varying vec3 vWorldPosition;
+varying float vProgress;
+varying float vSide;
+varying float vDepth;
+varying float vEnergy;
+
+const float TAU = 6.28318530718;
+
+void main() {
+  float phase = mod(uTime, max(uCycle, 0.1)) / max(uCycle, 0.1);
+  float loopAngle = phase * TAU;
+  vec3 normal = normalize(cross(dFdx(vWorldPosition), dFdy(vWorldPosition)));
+  if (!gl_FrontFacing) normal *= -1.0;
+  vec3 lightDirection = normalize(vec3(0.42, 0.72, 1.0));
+  float diffuse = 0.86 + max(dot(normal, lightDirection), 0.0) * 0.14;
+  float fresnel = pow(1.0 - abs(normal.z), 2.2);
+
+  float family = 0.5 + 0.5 * sin(uIndex * 1.73 + 0.4);
+  vec3 color = mix(uSky, uMint, family * 0.72);
+  color = mix(
+    color,
+    uLavender,
+    (0.5 + 0.5 * cos(uIndex * 1.19 + vProgress * 2.8)) * 0.42
+  );
+
+  float ridge = exp(-vSide * vSide * 7.5);
+  float silk = pow(0.5 + 0.5 * sin(
+    vProgress * (31.0 + uIndex * 0.7)
+      - vSide * 5.0
+      - loopAngle * 0.85
+      + uIndex
+  ), 7.0);
+  float flowingCaustic = pow(0.5 + 0.5 * sin(
+    vProgress * 15.0
+      - vSide * 3.2
+      + sin(vProgress * 6.0 - loopAngle) * 1.25
+      + loopAngle * 0.42
+  ), 8.0);
+
+  color *= diffuse;
+  color = mix(color, uIce, ridge * (0.12 + 0.08 * vDepth));
+  color = mix(color, uIce, silk * 0.14 + flowingCaustic * 0.1);
+  color = mix(color, uAccent, fresnel * 0.14);
+  color = mix(color, uIce, vEnergy * 0.44);
+
+  float sideFade = smoothstep(1.0, 0.92, abs(vSide));
+  float rootFade = smoothstep(0.0, 0.025, vProgress);
+  float alpha = sideFade * rootFade * (0.92 + ridge * 0.07);
+  gl_FragColor = vec4(color, alpha);
+}
+`;
+
+interface SilkBloomProps {
   color: string;
   cycleDuration: number;
   paused: boolean;
   restartSignal: number;
 }
 
-function DirectionalBloom({
+function SilkBloom({
   color,
   cycleDuration,
   paused,
   restartSignal,
-}: DirectionalBloomProps) {
-  const materialRef = useRef<THREE.ShaderMaterial>(null);
+}: SilkBloomProps) {
+  const materialRefs = useRef<Array<THREE.ShaderMaterial | null>>([]);
   const elapsedRef = useRef(0);
-
-  const uniforms = useMemo(() => ({
+  const geometry = useMemo(
+    () => new THREE.PlaneGeometry(1, 1, 96, 28),
+    [],
+  );
+  const uniforms = useMemo(() => Array.from({ length: PETAL_COUNT }, (_, index) => ({
     uTime: { value: 0 },
     uCycle: { value: cycleDuration },
+    uIndex: { value: index },
+    uCount: { value: PETAL_COUNT },
     uSky: { value: new THREE.Color(color) },
-    uMint: { value: new THREE.Color("#b8eee3") },
-    uLavender: { value: new THREE.Color("#d8d4f2") },
-    uIce: { value: new THREE.Color("#f5fbfd") },
-    uAccent: { value: new THREE.Color("#91d1ea") },
-  }), [color, cycleDuration]);
+    uMint: { value: new THREE.Color("#9ce8dc") },
+    uLavender: { value: new THREE.Color("#c7bdf0") },
+    uIce: { value: new THREE.Color("#f8fdff") },
+    uAccent: { value: new THREE.Color("#69bee3") },
+  })), [color, cycleDuration]);
+
+  useEffect(() => () => geometry.dispose(), [geometry]);
 
   useEffect(() => {
     elapsedRef.current = 0;
   }, [restartSignal]);
 
   useEffect(() => {
-    const material = materialRef.current;
-    if (!material) return;
     const main = new THREE.Color(color);
-    material.uniforms.uSky.value.copy(main).lerp(new THREE.Color("#d9f3fc"), 0.28);
-    material.uniforms.uMint.value.copy(main).lerp(new THREE.Color("#b8eee3"), 0.82);
-    material.uniforms.uLavender.value.copy(main).lerp(new THREE.Color("#d8d4f2"), 0.84);
-    material.uniforms.uIce.value.set("#f5fbfd");
-    material.uniforms.uAccent.value.copy(main).lerp(new THREE.Color("#7fc9e7"), 0.5);
+    materialRefs.current.forEach((material) => {
+      if (!material) return;
+      material.uniforms.uSky.value.copy(main).lerp(new THREE.Color("#d9f4ff"), 0.18);
+      material.uniforms.uMint.value.copy(main).lerp(new THREE.Color("#9ce8dc"), 0.9);
+      material.uniforms.uLavender.value.copy(main).lerp(new THREE.Color("#c7bdf0"), 0.92);
+      material.uniforms.uIce.value.set("#f8fdff");
+      material.uniforms.uAccent.value.copy(main).lerp(new THREE.Color("#69bee3"), 0.62);
+    });
   }, [color]);
 
   useFrame((_, delta) => {
-    const material = materialRef.current;
-    if (!material) return;
     if (!paused) elapsedRef.current += Math.min(delta, 0.05);
-    material.uniforms.uTime.value = paused ? cycleDuration * 0.46 : elapsedRef.current;
-    material.uniforms.uCycle.value = cycleDuration;
+    const displayTime = paused ? cycleDuration * 0.46 : elapsedRef.current;
+    materialRefs.current.forEach((material) => {
+      if (!material) return;
+      material.uniforms.uTime.value = displayTime;
+      material.uniforms.uCycle.value = cycleDuration;
+    });
   });
 
   return (
-    <mesh
-      position={[0, 0, -0.35]}
-      rotation={[0, 0, -0.42]}
-      scale={[3.38, 3.38, 1]}
-    >
-      <planeGeometry args={[1, 1, 1, 1]} />
-      <shaderMaterial
-        ref={materialRef}
-        vertexShader={vertexShader}
-        fragmentShader={fragmentShader}
-        uniforms={uniforms}
-        transparent
-        depthWrite={false}
-        depthTest={false}
-        blending={THREE.NormalBlending}
-        toneMapped={false}
-      />
-    </mesh>
+    <group rotation={[-0.04, -0.08, 0.02]} scale={1.24}>
+      {uniforms.map((petalUniforms, index) => (
+        <mesh key={index} geometry={geometry} renderOrder={index}>
+          <shaderMaterial
+            ref={(material) => {
+              materialRefs.current[index] = material;
+            }}
+            vertexShader={petalVertexShader}
+            fragmentShader={petalFragmentShader}
+            uniforms={petalUniforms}
+            transparent
+            side={THREE.DoubleSide}
+            depthTest
+            depthWrite={false}
+            toneMapped={false}
+          />
+        </mesh>
+      ))}
+    </group>
   );
 }
 
@@ -308,7 +311,7 @@ export default function BlueBloomFirework({
   return (
     <div className={cn("relative h-full w-full overflow-hidden", className)}>
       <Canvas
-        camera={{ position: [0, 0, 5.2], fov: 38, near: 0.1, far: 20 }}
+        camera={{ position: [0, 0, 4.0], fov: 38, near: 0.1, far: 20 }}
         dpr={[1, 2]}
         gl={{
           alpha: true,
@@ -318,7 +321,7 @@ export default function BlueBloomFirework({
         onCreated={({ gl }) => onCanvasReady?.(gl.domElement)}
       >
         <color attach="background" args={[backgroundColor]} />
-        <DirectionalBloom
+        <SilkBloom
           color={color}
           cycleDuration={cycleDuration}
           paused={paused}
