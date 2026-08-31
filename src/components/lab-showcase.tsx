@@ -27,7 +27,7 @@ export default function LabShowcase() {
         {([
           ["saved-orb", "已存球体"],
           ["media-lens", "媒体透镜"],
-          ["particle-bloom", "蓝色花火"],
+          ["particle-bloom", "蓝色绽放"],
         ] as const).map(([value, label]) => (
           <button
             key={value}

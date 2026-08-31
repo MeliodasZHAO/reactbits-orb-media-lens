@@ -66,7 +66,7 @@ export default function ParticleBloomShowcase() {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = "blue-lens-bloom-loop.webm";
+      anchor.download = "lensborne-blue-bloom-loop.webm";
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
@@ -163,7 +163,7 @@ export default function ParticleBloomShowcase() {
             GPU particle study · 06 seconds
           </p>
           <h1 className="mt-2 text-lg font-medium tracking-[-0.035em] sm:text-xl">
-            Blue bloom firework
+            Lensborne blue bloom
           </h1>
         </div>
 
@@ -176,7 +176,7 @@ export default function ParticleBloomShowcase() {
             >
               <input
                 type="color"
-                aria-label="Choose firework color"
+                aria-label="Choose bloom color"
                 value={color}
                 onChange={(event) => setColor(event.target.value)}
                 className="absolute inset-0 size-full cursor-pointer opacity-0"
@@ -215,9 +215,9 @@ export default function ParticleBloomShowcase() {
       <footer className={`pointer-events-none absolute inset-x-0 bottom-16 z-20 flex items-end justify-between gap-6 p-5 font-mono text-[9px] uppercase leading-5 tracking-[0.15em] sm:bottom-12 sm:p-8 sm:text-[10px] ${
         lensPreview ? "text-[#165c83]/46" : "text-sky-100/32"
       }`}>
-        <p>32,000 layered sparks · counterflow corona + mist</p>
+        <p>32,000 layered particles · directional corona + mist</p>
         <p className="text-right">
-          {lensPreview ? "Live canvas texture · click lens for ripple" : "Click anywhere to relaunch"}
+          {lensPreview ? "Live canvas texture · click lens for ripple" : "Click anywhere to restart cycle"}
         </p>
       </footer>
     </main>
