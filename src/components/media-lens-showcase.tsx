@@ -8,9 +8,9 @@ import MediaLensFrame, {
   type MediaLensShape,
 } from "@/components/media-lens-frame";
 
-const DEFAULT_MEDIA = "/generated-bloom-loop-v11-optical.mp4";
-const DEFAULT_MEDIA_NAME = "原创蓝色绽放 · 光流 60 FPS 循环";
-const DEFAULT_MEDIA_INFO = "VIDEO · 960×960 · 6 秒 · 光流 60 FPS";
+const DEFAULT_MEDIA = "/generated-bloom-loop-v13-stable-120.mp4";
+const DEFAULT_MEDIA_NAME = "原创蓝色绽放 · 稳定 120 FPS 循环";
+const DEFAULT_MEDIA_INFO = "VIDEO · 960×960 · 6 秒 · 稳定 120 FPS";
 
 export default function MediaLensShowcase() {
   const [src, setSrc] = useState(DEFAULT_MEDIA);

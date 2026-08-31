@@ -43,9 +43,11 @@ const getFramePosition = (phase: number) => {
 
 interface FrameDrawOptions {
   alpha: number;
+  blendMode?: GlobalCompositeOperation;
   canvasHeight: number;
   canvasWidth: number;
   context: CanvasRenderingContext2D;
+  expansion: number;
   frame: number;
   image: HTMLImageElement;
   phase: number;
@@ -54,9 +56,11 @@ interface FrameDrawOptions {
 
 function drawFrame({
   alpha,
+  blendMode = "source-over",
   canvasHeight,
   canvasWidth,
   context,
+  expansion,
   frame,
   image,
   phase,
@@ -70,15 +74,26 @@ function drawFrame({
   const coverScale = Math.min(
     canvasWidth / frameWidth,
     canvasHeight / frameHeight,
-  ) * 0.84;
+  ) * 0.86;
   const breathing = 1 + Math.sin(phase * Math.PI * 2) * 0.006;
   const drawWidth = frameWidth * coverScale * scale * breathing;
   const drawHeight = frameHeight * coverScale * scale * breathing;
   const drawX = (canvasWidth - drawWidth) * 0.5;
   const drawY = (canvasHeight - drawHeight) * 0.5;
+  // Keep the calyx in the upper-right visually anchored. The extra opening
+  // therefore travels through the petals toward the lower-left instead of
+  // looking like a generic centre-based zoom.
+  const pivotX = drawX + drawWidth * 0.72;
+  const pivotY = drawY + drawHeight * 0.27;
+  const stretchX = 1 + expansion * 0.12;
+  const stretchY = 1 + expansion * 0.17;
 
   context.save();
+  context.globalCompositeOperation = blendMode;
   context.globalAlpha = alpha;
+  context.translate(pivotX, pivotY);
+  context.scale(stretchX, stretchY);
+  context.translate(-pivotX, -pivotY);
   context.drawImage(
     image,
     sourceX,
@@ -165,23 +180,43 @@ export default function BlueBloomFirework({
           ? 0.56
           : (elapsedRef.current % cycleDuration) / cycleDuration;
         const framePosition = getFramePosition(phase) * INTERPOLATED_STEPS;
-        // Display exactly one complete motion-interpolated pose. Layering the
-        // next transparent frame on top increased brightness throughout every
-        // interval and reset it at the boundary, creating a high-frequency
-        // pulse. The 96-pose atlas is dense enough to switch directly.
-        const currentFrame = Math.round(framePosition) % FRAME_COUNT;
-        const releaseScale = 1;
+        const currentFrame = Math.floor(framePosition) % FRAME_COUNT;
+        const nextFrame = (currentFrame + 1) % FRAME_COUNT;
+        const frameMix = framePosition - Math.floor(framePosition);
+        const authoredProgress = clamp01(framePosition / (FRAME_COUNT - 1));
+        const opening = smoother((authoredProgress - 0.12) / 0.34);
+        const closing = 1 - smoother((authoredProgress - 0.7) / 0.26);
+        const expansion = opening * closing;
+        const releaseScale = 1 + expansion * 0.055;
 
+        // `lighter` makes the two alpha weights additive. Their sum remains
+        // exactly one, so the in-between poses are continuous without the
+        // brightness pulse produced by stacking two source-over images.
         drawFrame({
-          alpha: 1,
+          alpha: 1 - frameMix,
           canvasHeight: canvas.height,
           canvasWidth: canvas.width,
           context,
+          expansion,
           frame: currentFrame,
           image,
           phase,
           scale: releaseScale,
         });
+        if (frameMix > 0.001) {
+          drawFrame({
+            alpha: frameMix,
+            blendMode: "lighter",
+            canvasHeight: canvas.height,
+            canvasWidth: canvas.width,
+            context,
+            expansion,
+            frame: nextFrame,
+            image,
+            phase,
+            scale: releaseScale,
+          });
+        }
         context.save();
         context.globalCompositeOperation = "source-atop";
         context.globalAlpha = 0.11;

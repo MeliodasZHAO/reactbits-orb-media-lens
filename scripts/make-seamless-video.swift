@@ -4,12 +4,20 @@ import CoreImage
 import Foundation
 
 guard CommandLine.arguments.count >= 3 else {
-  fputs("Usage: make-seamless-video <input-video> <output-video>\n", stderr)
+  fputs("Usage: make-seamless-video <input-video> <output-video> [output-fps]\n", stderr)
   exit(2)
 }
 
 let inputURL = URL(fileURLWithPath: CommandLine.arguments[1])
 let outputURL = URL(fileURLWithPath: CommandLine.arguments[2])
+let requestedFrameRate = CommandLine.arguments.count >= 4
+  ? Int32(CommandLine.arguments[3])
+  : 60
+guard let outputFrameRate = requestedFrameRate,
+      (24...120).contains(outputFrameRate) else {
+  fputs("output-fps must be an integer from 24 through 120.\n", stderr)
+  exit(2)
+}
 try? FileManager.default.removeItem(at: outputURL)
 
 let asset = AVURLAsset(url: inputURL)
@@ -93,7 +101,6 @@ sourceFrames = sourceFrames.map { frame in
 }
 
 let outputDuration = 6.0
-let outputFrameRate: Int32 = 60
 let outputFrameCount = Int(outputDuration * Double(outputFrameRate))
 let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
 let writerInput = AVAssetWriterInput(

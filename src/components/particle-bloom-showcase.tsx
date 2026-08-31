@@ -51,7 +51,7 @@ export default function ParticleBloomShowcase() {
       "video/webm;codecs=vp8",
       "video/webm",
     ].find((type) => MediaRecorder.isTypeSupported(type));
-    const stream = canvas.captureStream(60);
+    const stream = canvas.captureStream(120);
     const chunks: Blob[] = [];
     const recorder = new MediaRecorder(stream, {
       ...(mimeType ? { mimeType } : {}),
@@ -147,7 +147,7 @@ export default function ParticleBloomShowcase() {
       <header className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-5 p-5 sm:p-8">
         <div>
           <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-[#165c83]/55 sm:text-[10px]">
-            GPU organic study · 06.5 seconds
+            GPU organic study · continuous interpolation · 120 FPS export
           </p>
           <h1 className="mt-2 text-lg font-medium tracking-[-0.035em] sm:text-xl">
             Lensborne blue bloom
@@ -200,7 +200,7 @@ export default function ParticleBloomShowcase() {
       </header>
 
       <footer className="pointer-events-none absolute inset-x-0 bottom-16 z-20 flex items-end justify-between gap-6 p-5 font-mono text-[9px] uppercase leading-5 tracking-[0.15em] text-[#165c83]/46 sm:bottom-12 sm:p-8 sm:text-[10px]">
-        <p>Sequential organic bloom · 6.5-second seamless loop</p>
+        <p>Directional organic bloom · 6.5-second seamless loop</p>
         <p className="text-right">
           {lensPreview ? "Live canvas texture · click lens for ripple" : "Click anywhere to restart cycle"}
         </p>
