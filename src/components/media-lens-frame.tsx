@@ -264,7 +264,10 @@ function useMediaTexture(
 
     if (sourceCanvas) {
       const canvasTexture = new THREE.CanvasTexture(sourceCanvas);
-      canvasTexture.colorSpace = THREE.SRGBColorSpace;
+      // The live WebGL canvas already contains display-referred output. Treat
+      // its pixels as untagged here so the lens does not decode the same sRGB
+      // values a second time and make the subject darker than the viewport.
+      canvasTexture.colorSpace = THREE.NoColorSpace;
       canvasTexture.minFilter = THREE.LinearFilter;
       canvasTexture.magFilter = THREE.LinearFilter;
       canvasTexture.wrapS = THREE.ClampToEdgeWrapping;
