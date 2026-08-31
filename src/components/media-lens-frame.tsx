@@ -27,6 +27,8 @@ export interface MediaLensFrameProps {
   mediaScale?: number;
   mediaOffsetX?: number;
   mediaOffsetY?: number;
+  mediaRotation?: number;
+  lensAngle?: number;
   alt?: string;
   className?: string;
 }
@@ -61,6 +63,8 @@ const fragmentShader = `
   uniform float uMediaAspect;
   uniform float uMediaScale;
   uniform vec2 uMediaOffset;
+  uniform float uMediaRotation;
+  uniform float uLensAngle;
   uniform float uRefraction;
   uniform float uEdgeWidth;
   uniform float uShape;
@@ -72,6 +76,22 @@ const fragmentShader = `
 
   const float TAU = 6.28318530718;
 
+  vec2 rotateVector(vec2 point, float angle) {
+    float sine = sin(angle);
+    float cosine = cos(angle);
+    return vec2(
+      cosine * point.x - sine * point.y,
+      sine * point.x + cosine * point.y
+    );
+  }
+
+  vec2 transformMediaUv(vec2 uv) {
+    vec2 scaled = (uv - 0.5) / max(uMediaScale, 0.01);
+    // UVs move opposite to the requested visual rotation.
+    vec2 rotated = rotateVector(scaled, -uMediaRotation);
+    return rotated + 0.5 + vec2(-uMediaOffset.x, uMediaOffset.y);
+  }
+
   vec2 coverUv(vec2 uv) {
     vec2 scale = vec2(1.0);
     if (uMediaAspect > uViewportAspect) {
@@ -80,9 +100,7 @@ const fragmentShader = `
       scale.y = uMediaAspect / uViewportAspect;
     }
     vec2 fitted = (uv - 0.5) * scale + 0.5;
-    return (fitted - 0.5) / max(uMediaScale, 0.01)
-      + 0.5
-      + vec2(-uMediaOffset.x, uMediaOffset.y);
+    return transformMediaUv(fitted);
   }
 
   float superRadius(vec2 p, float exponent) {
@@ -124,16 +142,23 @@ const fragmentShader = `
 
     // ReactBits Black Hole-inspired pull, deliberately restricted to the rim.
     float breathe = 0.5 + 0.5 * sin(uTime * 0.58);
-    vec2 gravityPoint = vec2(-0.28, -0.92) + vec2(0.014, 0.018) * breathe;
+    // Rotate the complete authored pull field around the rim. At 45 degrees
+    // these vectors exactly reproduce the original upper-right treatment.
+    float fieldRotation = uLensAngle - 0.78539816339;
+    vec2 gravityPoint = rotateVector(
+      vec2(-0.28, -0.92) + vec2(0.014, 0.018) * breathe,
+      fieldRotation
+    );
     vec2 toGravity = gravityPoint - p;
     float gravityDistance = max(length(toGravity), 0.08);
-    float upperRight = smoothstep(-0.5, 0.82, dot(p, normalize(vec2(1.0, 1.0))));
-    float gravityPull = outerLens * (0.105 + upperRight * 0.13)
+    vec2 lensDirection = rotateVector(normalize(vec2(1.0, 1.0)), fieldRotation);
+    float lensEmphasis = smoothstep(-0.5, 0.82, dot(p, lensDirection));
+    float gravityPull = outerLens * (0.105 + lensEmphasis * 0.13)
       / (0.78 + gravityDistance * 0.46);
     planetP += normalize(toGravity) * gravityPull * uRefraction;
 
-    vec2 flowDirection = normalize(vec2(-0.58, -1.0));
-    planetP += flowDirection * outerLens * (0.05 + upperRight * 0.12) * uRefraction;
+    vec2 flowDirection = rotateVector(normalize(vec2(-0.58, -1.0)), fieldRotation);
+    planetP += flowDirection * outerLens * (0.05 + lensEmphasis * 0.12) * uRefraction;
 
     // A dedicated outer gravitational lens. It compresses and shears the
     // panorama before the silhouette ends, so it reads as bent content rather
@@ -141,7 +166,7 @@ const fragmentShader = `
     vec2 gravityDirection = normalize(toGravity + vec2(0.0001));
     vec2 gravityTangent = vec2(-gravityDirection.y, gravityDirection.x);
     float directionalShear = dot(p, gravityTangent);
-    planetP += gravityDirection * outerLens * (0.032 + upperRight * 0.055) * uRefraction;
+    planetP += gravityDirection * outerLens * (0.032 + lensEmphasis * 0.055) * uRefraction;
     planetP += gravityTangent * outerLens * directionalShear * 0.045 * uRefraction;
     planetP *= 1.0 - outerLens * 0.1 * uRefraction;
 
@@ -209,9 +234,7 @@ const fragmentShader = `
       fract(longitude / TAU + 0.375),
       0.985 - latitude * 0.97
     );
-    planetUv = (planetUv - 0.5) / max(uMediaScale, 0.01)
-      + 0.5
-      + vec2(-uMediaOffset.x, uMediaOffset.y);
+    planetUv = transformMediaUv(planetUv);
     planetUv = vec2(fract(planetUv.x), clamp(planetUv.y, 0.001, 0.999));
 
     float aberration = (
@@ -457,6 +480,8 @@ function LensPlane({
   mediaScale,
   mediaOffsetX,
   mediaOffsetY,
+  mediaRotation,
+  lensAngle,
   pointerRef,
   rippleRef,
 }: {
@@ -470,6 +495,8 @@ function LensPlane({
   mediaScale: number;
   mediaOffsetX: number;
   mediaOffsetY: number;
+  mediaRotation: number;
+  lensAngle: number;
   pointerRef: RefObject<THREE.Vector2>;
   rippleRef: RefObject<RippleState>;
 }) {
@@ -487,6 +514,8 @@ function LensPlane({
       uMediaAspect: { value: 1 },
       uMediaScale: { value: 1 },
       uMediaOffset: { value: new THREE.Vector2(0, 0) },
+      uMediaRotation: { value: 0 },
+      uLensAngle: { value: Math.PI / 4 },
       uRefraction: { value: 1 },
       uEdgeWidth: { value: 0.3 },
       uShape: { value: 0 },
@@ -528,6 +557,8 @@ function LensPlane({
     liveUniforms.uMediaAspect.value = textureAspect(texture);
     liveUniforms.uMediaScale.value = mediaScale;
     liveUniforms.uMediaOffset.value.set(mediaOffsetX / 100, mediaOffsetY / 100);
+    liveUniforms.uMediaRotation.value = THREE.MathUtils.degToRad(mediaRotation);
+    liveUniforms.uLensAngle.value = THREE.MathUtils.degToRad(lensAngle);
     liveUniforms.uRefraction.value = refraction;
     liveUniforms.uEdgeWidth.value = 0.14 + (edgeWidth / 44) * 0.34;
     liveUniforms.uShape.value = shape === "circle" ? 0 : 1;
@@ -579,6 +610,8 @@ export default function MediaLensFrame({
   mediaScale = 1,
   mediaOffsetX = 0,
   mediaOffsetY = 0,
+  mediaRotation = 0,
+  lensAngle = 45,
   alt = "Uploaded media inside a refractive glass frame",
   className,
 }: MediaLensFrameProps) {
@@ -589,6 +622,11 @@ export default function MediaLensFrame({
     active: 0,
   });
   const radius = shape === "circle" ? "9999px" : `${cornerRadius}px`;
+  const lensRadians = THREE.MathUtils.degToRad(lensAngle);
+  const lensHighlightX = 50 + Math.cos(lensRadians) * 36;
+  const lensHighlightY = 50 - Math.sin(lensRadians) * 36;
+  const lensShadowX = 50 - Math.cos(lensRadians) * 34;
+  const lensShadowY = 50 + Math.sin(lensRadians) * 34;
   const frameStyle: LensStyle = {
     "--lens-radius": radius,
     borderRadius: radius,
@@ -654,6 +692,8 @@ export default function MediaLensFrame({
           mediaScale={mediaScale}
           mediaOffsetX={mediaOffsetX}
           mediaOffsetY={mediaOffsetY}
+          mediaRotation={mediaRotation}
+          lensAngle={lensAngle}
           pointerRef={pointerRef}
           rippleRef={rippleRef}
         />
@@ -663,8 +703,7 @@ export default function MediaLensFrame({
         className="pointer-events-none absolute inset-0 mix-blend-screen"
         style={{
           borderRadius: radius,
-          background:
-            "radial-gradient(ellipse 48% 30% at 77% 10%, rgba(255,255,255,.44), transparent 72%), radial-gradient(ellipse 28% 20% at 21% 84%, rgba(97,231,255,.2), transparent 76%)",
+          background: `radial-gradient(ellipse 48% 30% at ${lensHighlightX}% ${lensHighlightY}%, rgba(255,255,255,.44), transparent 72%), radial-gradient(ellipse 28% 20% at ${lensShadowX}% ${lensShadowY}%, rgba(97,231,255,.2), transparent 76%)`,
           WebkitMaskImage:
             "radial-gradient(circle, transparent 0 68%, black 88%)",
           maskImage:

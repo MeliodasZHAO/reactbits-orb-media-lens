@@ -8,9 +8,9 @@ import MediaLensFrame, {
   type MediaLensShape,
 } from "@/components/media-lens-frame";
 
-const DEFAULT_MEDIA = "/feishu-20260828-174107.mp4";
-const DEFAULT_MEDIA_NAME = "飞书20260828-174107";
-const DEFAULT_MEDIA_INFO = "VIDEO · 960×960 · 6.5 秒";
+const DEFAULT_MEDIA = "/generated-bloom-loop-v10.mp4";
+const DEFAULT_MEDIA_NAME = "原创蓝色绽放 · 60 FPS 循环";
+const DEFAULT_MEDIA_INFO = "VIDEO · 960×960 · 6 秒 · 60 FPS";
 
 export default function MediaLensShowcase() {
   const [src, setSrc] = useState(DEFAULT_MEDIA);
@@ -24,6 +24,8 @@ export default function MediaLensShowcase() {
   const [mediaScale, setMediaScale] = useState(1);
   const [mediaOffsetX, setMediaOffsetX] = useState(0);
   const [mediaOffsetY, setMediaOffsetY] = useState(0);
+  const [mediaRotation, setMediaRotation] = useState(0);
+  const [lensAngle, setLensAngle] = useState(45);
   const inspectionId = useRef(0);
 
   useEffect(() => {
@@ -81,6 +83,8 @@ export default function MediaLensShowcase() {
     setMediaScale(1);
     setMediaOffsetX(0);
     setMediaOffsetY(0);
+    setMediaRotation(0);
+    setLensAngle(45);
   };
 
   return (
@@ -192,6 +196,24 @@ export default function MediaLensShowcase() {
             unit="%"
             onChange={setMediaOffsetY}
           />
+          <Control
+            label="内容旋转"
+            value={mediaRotation}
+            min={-180}
+            max={180}
+            step={1}
+            unit="°"
+            onChange={setMediaRotation}
+          />
+          <Control
+            label="边缘扭曲点"
+            value={lensAngle}
+            min={0}
+            max={360}
+            step={1}
+            unit="°"
+            onChange={setLensAngle}
+          />
 
           <button
             type="button"
@@ -214,6 +236,8 @@ export default function MediaLensShowcase() {
             mediaScale={mediaScale}
             mediaOffsetX={mediaOffsetX}
             mediaOffsetY={mediaOffsetY}
+            mediaRotation={mediaRotation}
+            lensAngle={lensAngle}
             className="aspect-square w-[min(70vw,560px)]"
           />
         </section>
