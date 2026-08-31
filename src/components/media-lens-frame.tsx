@@ -18,6 +18,7 @@ export type MediaLensKind = "image" | "gif" | "video";
 
 export interface MediaLensFrameProps {
   src: string;
+  sourceCanvas?: HTMLCanvasElement | null;
   kind?: MediaLensKind;
   shape?: MediaLensShape;
   borderWidth?: number;
@@ -246,7 +247,11 @@ const fragmentShader = `
   }
 `;
 
-function useMediaTexture(src: string, kind: MediaLensKind) {
+function useMediaTexture(
+  src: string,
+  kind: MediaLensKind,
+  sourceCanvas?: HTMLCanvasElement | null,
+) {
   const [texture, setTexture] = useState<THREE.Texture | null>(null);
 
   useEffect(() => {
@@ -254,9 +259,22 @@ function useMediaTexture(src: string, kind: MediaLensKind) {
     let video: HTMLVideoElement | null = null;
     let image: HTMLImageElement | null = null;
     let ownedTexture: THREE.Texture | null = null;
+    let revealFrame = 0;
     const abortController = new AbortController();
 
-    if (kind === "video") {
+    if (sourceCanvas) {
+      const canvasTexture = new THREE.CanvasTexture(sourceCanvas);
+      canvasTexture.colorSpace = THREE.SRGBColorSpace;
+      canvasTexture.minFilter = THREE.LinearFilter;
+      canvasTexture.magFilter = THREE.LinearFilter;
+      canvasTexture.wrapS = THREE.ClampToEdgeWrapping;
+      canvasTexture.wrapT = THREE.ClampToEdgeWrapping;
+      canvasTexture.generateMipmaps = false;
+      ownedTexture = canvasTexture;
+      revealFrame = window.requestAnimationFrame(() => {
+        if (!disposed) setTexture(canvasTexture);
+      });
+    } else if (kind === "video") {
       video = document.createElement("video");
       video.src = src;
       video.muted = true;
@@ -393,6 +411,7 @@ function useMediaTexture(src: string, kind: MediaLensKind) {
 
     return () => {
       disposed = true;
+      window.cancelAnimationFrame(revealFrame);
       abortController.abort();
       ownedTexture?.dispose();
       if (video) {
@@ -405,7 +424,7 @@ function useMediaTexture(src: string, kind: MediaLensKind) {
         image.removeAttribute("src");
       }
     };
-  }, [kind, src]);
+  }, [kind, sourceCanvas, src]);
 
   return texture;
 }
@@ -426,6 +445,7 @@ function textureAspect(texture: THREE.Texture) {
 
 function LensPlane({
   src,
+  sourceCanvas,
   kind,
   shape,
   edgeWidth,
@@ -438,6 +458,7 @@ function LensPlane({
   rippleRef,
 }: {
   src: string;
+  sourceCanvas?: HTMLCanvasElement | null;
   kind: MediaLensKind;
   shape: MediaLensShape;
   edgeWidth: number;
@@ -452,7 +473,7 @@ function LensPlane({
   const meshRef = useRef<THREE.Mesh>(null);
   const materialRef = useRef<THREE.ShaderMaterial>(null);
   const smoothPointer = useRef(new THREE.Vector2(0.5, 0.5));
-  const texture = useMediaTexture(src, kind);
+  const texture = useMediaTexture(src, kind, sourceCanvas);
   const { size } = useThree();
 
   const uniforms = useMemo(
@@ -486,6 +507,12 @@ function LensPlane({
         // eslint-disable-next-line react-hooks/immutability
         texture.needsUpdate = true;
       }
+    }
+
+    if (sourceCanvas) {
+      // A live R3F canvas is a dynamic TexImageSource. Upload its newest frame
+      // before the refractive pass so the preview uses the actual animation.
+      texture.needsUpdate = true;
     }
 
     const target = pointerRef.current ?? new THREE.Vector2(0.5, 0.5);
@@ -540,6 +567,7 @@ function LensPlane({
 
 export default function MediaLensFrame({
   src,
+  sourceCanvas,
   kind = "image",
   shape = "circle",
   borderWidth = 22,
@@ -614,6 +642,7 @@ export default function MediaLensFrame({
       >
         <LensPlane
           src={src}
+          sourceCanvas={sourceCanvas}
           kind={kind}
           shape={shape}
           edgeWidth={borderWidth}

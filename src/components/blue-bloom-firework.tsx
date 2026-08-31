@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 
 export interface BlueBloomFireworkProps {
   color?: string;
+  backgroundColor?: string;
+  lightSurface?: boolean;
   particleCount?: number;
   cycleDuration?: number;
   paused?: boolean;
@@ -192,11 +194,11 @@ void main() {
     vec2 visualTangent = normalize(mix(tangent, seamTangent, seamMix));
     travelAngle = atan(visualTangent.y, visualTangent.x);
   } else if (aKind < 1.5) {
-    // The moving head compresses only for a few frames; it never becomes a
-    // held intermediate pose. The burst begins before the tail has faded.
+    // Keep the launch head compact. The old vertically stretched seed cloud
+    // read as a separate glowing column before the flower opened.
     float gather = smoothstep(0.64, 0.98, t);
     float release = smoothstep(4.35 + aLayer * 0.08, 5.92, t);
-    float coreRound = smoothstep(0.94, 1.52, t);
+    float coreOpen = smoothstep(0.98, 1.26, t);
     float arrivalProgress = pow(saturate(t / 1.06), 0.76);
     vec2 arrival = cubicBezier(
       launchStart,
@@ -207,23 +209,29 @@ void main() {
     );
     float angle = aSeed * TAU;
     float radius = 0.004 + 0.108 * sqrt(aSeedB);
-    float fold = 0.45 + 0.55 * sin(angle * 3.0 + aLayer * PI);
-    vec3 foldedBud = vec3(
-      cos(angle) * radius * mix(0.34, 0.7, fold),
-      (aSeedC - 0.5) * 0.34 + abs(sin(angle)) * radius * 0.48,
-      sin(angle) * radius * 0.62
+    float coreAngle = angle
+      + coreOpen * (0.42 + (aLayer - 0.5) * 0.34)
+      + sin(angle * 3.0 + t * 1.2) * 0.08 * coreOpen;
+    vec3 compressedCore = vec3(
+      cos(angle) * radius * 0.24,
+      sin(angle) * radius * 0.24,
+      (aSeedC - 0.5) * radius * 0.34
     );
-    vec3 roundCore = vec3(
-      cos(angle) * radius * (0.72 + aSeedC * 0.28),
-      sin(angle) * radius * (0.72 + aSeedB * 0.28),
-      (aSeedC - 0.5) * radius * 1.35
+    vec3 openCore = vec3(
+      cos(coreAngle) * radius * (0.78 + aSeedC * 0.22),
+      sin(coreAngle) * radius * (0.62 + aSeedB * 0.2),
+      (aSeedC - 0.5) * radius * 1.08
     );
-    vec3 budOffset = mix(foldedBud, roundCore, coreRound);
-    vec3 arrivingBud = vec3(arrival, 0.0) + budOffset * 0.46;
-    vec3 openedBud = bloomCenter + budOffset * mix(0.72, 1.0, gather);
-    positionNow = mix(arrivingBud, openedBud, gather);
+    vec3 budOffset = mix(compressedCore, openCore, coreOpen);
+    vec3 arrivingCore = vec3(arrival, 0.0) + compressedCore;
+    vec3 openedCore = bloomCenter + budOffset;
+    positionNow = mix(arrivingCore, openedCore, coreOpen);
     float impactPulse = exp(-pow((t - 1.055) / 0.13, 2.0));
-    positionNow.xy += lensAxis * impactPulse * (aSeedC - 0.5) * 0.035;
+    vec2 impactAcross = vec2(-lensAxis.y, lensAxis.x);
+    positionNow.xy += (
+      lensAxis * (aSeedC - 0.5) * 0.026
+      + impactAcross * (aSeedD - 0.5) * 0.018
+    ) * impactPulse;
 
     float coreRecycle = smoothstep(4.18, 5.78, t);
     float coreTravel = smoothstep(4.48, 5.86, t);
@@ -250,59 +258,105 @@ void main() {
       coreTravel
     );
     positionNow = mix(positionNow, recycledCore, coreRecycle);
-    alpha = gather * (1.0 - release) * mix(0.68, 0.3, coreRound);
+    alpha = gather * (1.0 - release) * mix(0.56, 0.34, coreOpen);
     heat = 0.46 + 0.24 * (1.0 - aSeedB);
     twinkle = 0.94 + 0.06 * sin(t * 15.0 + aSeedD * 31.0);
     tone = mix(0.48, 0.92, aSeedC);
     softness = smoothstep(0.18, 0.0, aSeedD) * 0.7;
   } else if (aKind < 2.5) {
-    // Interlocking inner and outer petals create one asymmetric living bloom.
-    float outerLayer = step(0.46, aLayer);
-    float petalCount = mix(7.0, 9.0, outerLayer);
+    // A dense vortex core and two 8/13 ribbon crowns open directly from the
+    // impact point. Curvature is carried along each strand, avoiding a common
+    // radial firework silhouette.
+    // Every petal already owns its final direction while compressed, so there
+    // is no vertical bud pose and no sudden switch from column to radial fan.
+    float middleLayer = step(0.34, aLayer);
+    float outerLayer = step(0.69, aLayer);
+    float layerBand = middleLayer + outerLayer;
+    float petalCount = mix(17.0, 8.0, middleLayer);
+    petalCount = mix(petalCount, 13.0, outerLayer);
     float petalIndex = floor(aSeed * petalCount);
+    float handedness = 1.0 - 2.0 * middleLayer + 2.0 * outerLayer;
     float petalAngle =
-      PI * 0.5
+      PI * 0.58
       + petalIndex * TAU / petalCount
-      + outerLayer * 0.19
-      + 0.075 * sin(petalIndex * 2.41 + outerLayer);
+      + middleLayer * 0.23
+      - outerLayer * 0.11
+      + 0.11 * sin(petalIndex * 2.41 + layerBand * 1.7);
     float petalVariation =
-      0.84
-      + 0.2 * sin(petalIndex * 1.91 + aLayer * 2.3)
-      + 0.05 * sin(petalIndex * 4.17);
+      0.82
+      + 0.22 * sin(petalIndex * 1.91 + aLayer * 2.3)
+      + 0.08 * sin(petalIndex * 4.17);
     float along = pow(aSeedB, mix(0.52, 0.68, aLayer));
-    float petalStagger = fract(petalIndex * 0.381966) * 0.035;
-    float spawn = 1.005 + aLayer * 0.08 + petalStagger + aSeedD * 0.025;
+    float petalStagger = fract(petalIndex * 0.381966) * 0.018;
+    float spawn = 0.995 + aLayer * 0.055 + petalStagger + aSeedD * 0.016;
     float bloomAge = max(t - spawn, 0.0);
     float bloom = 1.0 - exp(
-      -bloomAge * mix(4.8, 3.4, aLayer)
+      -bloomAge * mix(5.4, 3.75, aLayer)
     );
     bloom = saturate(bloom);
+    float livingPhase = smoothstep(1.28, 1.78, t)
+      * (1.0 - smoothstep(3.82, 4.12, t));
+    float bandDirection = mix(1.0, -1.0, middleLayer)
+      + outerLayer * 1.65;
+    float opposingDrift = livingPhase
+      * bandDirection
+      * (
+        0.07 * sin((t - 1.15) * 1.12 + aLayer * 1.7)
+        + 0.025 * sin((t - 1.15) * 0.48)
+      );
+    float openingShear = (1.0 - bloom)
+      * handedness
+      * mix(0.36, 0.16, smoothstep(0.0, 2.0, layerBand))
+      * sin(along * PI);
+    float spiralSweep = along
+      * handedness
+      * mix(0.92, 0.28, smoothstep(0.0, 2.0, layerBand))
+      * bloom;
     float bend =
       sin(along * PI)
-      * (0.1 * sin(petalIndex * 1.67 + aLayer * 3.0)
-        + 0.055 * sin(t * 0.72 + aSeedD * 5.0));
-    float unfoldedAngle =
+      * (
+        mix(0.14, 0.065, smoothstep(0.0, 2.0, layerBand)) * handedness
+        + 0.075 * sin(petalIndex * 1.67 + aLayer * 3.0)
+        + livingPhase * 0.045 * sin(t * 1.3 - along * 5.4 + petalIndex)
+      );
+    float localAngle =
       petalAngle
+      + openingShear
+      + spiralSweep
+      + opposingDrift
       + (aSeedC - 0.5) * mix(0.06, 0.2, bloom)
       + (aSeedD - 0.5) * 0.08 * bloom * bloom
       + (aLayer - 0.5) * along * 0.15
       + bend * bloom;
-    float unfurl = smoothstep(0.0, 0.32, bloom);
-    float foldedAngle = PI * 0.5
-      + (aSeedC - 0.5) * 0.24
-      + (petalIndex - petalCount * 0.5) * 0.018;
-    float localAngle = mix(foldedAngle, unfoldedAngle, unfurl);
     vec2 direction = vec2(cos(localAngle), sin(localAngle));
     vec2 across = vec2(-direction.y, direction.x);
+    float breath = 1.0 + livingPhase * (
+      0.032 * sin(t * 1.58 + petalIndex * 0.72 + aLayer * PI)
+      + 0.014 * sin(t * 2.7 - along * 3.2)
+    );
     float radius = mix(
-      0.035 + along * 0.09,
-      0.1 + along * mix(0.76, 1.42, aLayer) * petalVariation,
+      0.018 + along * 0.045,
+      (
+        0.095
+        + along
+          * mix(0.7, 1.42, smoothstep(0.0, 2.0, layerBand))
+          * petalVariation
+      ) * breath,
       bloom
     );
+    float tipHook = smoothstep(0.62, 1.0, along)
+      * handedness
+      * mix(0.11, 0.055, outerLayer)
+      * bloom;
     float petalWidth =
       (aSeedC - 0.5)
       * sin(along * PI)
-      * mix(0.024, 0.2 + outerLayer * 0.075 + aLayer * 0.035, bloom);
+      * mix(
+        0.018,
+        mix(0.145, 0.085, smoothstep(0.0, 2.0, layerBand)),
+        bloom
+      );
+    petalWidth += tipHook * (0.25 + 0.75 * aSeedD);
     vec2 petal = direction * radius + across * petalWidth;
     petal.y *= 0.9;
 
@@ -318,11 +372,19 @@ void main() {
     float upperRightLobe = smoothstep(0.25, 0.88, dot(direction, -lensAxis));
     petal += lensAxis * upperRightLobe * lensReach * 0.11;
 
-    vec2 flow = vec2(
-      sin(petal.y * 4.2 + aSeedD * 12.0 + t * 0.76),
-      cos(petal.x * 3.7 - aSeedC * 10.0 - t * 0.58)
+    float travelingWave = sin(
+      along * TAU * 1.35 - t * 1.82 + petalIndex * 0.76 + aLayer * 2.2
     );
-    petal += flow * (0.008 + along * 0.028) * bloom;
+    vec2 flow = vec2(
+      sin(petal.y * 4.2 + aSeedD * 12.0 + t * 0.68),
+      cos(petal.x * 3.7 - aSeedC * 10.0 - t * 0.52)
+    );
+    petal += across
+      * travelingWave
+      * livingPhase
+      * sin(along * PI)
+      * (0.012 + smoothstep(0.0, 2.0, layerBand) * 0.014);
+    petal += flow * (0.006 + along * 0.021) * bloom;
 
     float settle = max(t - 3.35, 0.0);
     petal.x +=
@@ -331,7 +393,10 @@ void main() {
     petal.y -= settle * settle * (0.014 + aSeedC * 0.016);
     vec3 bloomPosition = bloomCenter + vec3(
       petal,
-      (aSeedC - 0.5) * sin(along * PI) * mix(0.08, 0.72, bloom)
+      (aSeedC - 0.5) * sin(along * PI) * mix(0.05, 0.7, bloom)
+      + livingPhase * sin(t * 1.05 + petalIndex * 0.9 - along * 3.5)
+        * sin(along * PI)
+        * mix(0.025, 0.075, smoothstep(0.0, 2.0, layerBand))
     );
 
     // The actual flower performs the return. Petals first fold back toward the
@@ -506,6 +571,7 @@ uniform vec3 uBlue;
 uniform vec3 uCyan;
 uniform vec3 uViolet;
 uniform vec3 uIce;
+uniform float uLightSurface;
 
 varying float vAlpha;
 varying float vHeat;
@@ -533,9 +599,11 @@ void main() {
     exp(-distanceFromCenter * distanceFromCenter * 2.25)
     * (1.0 - smoothstep(0.76, 1.0, distanceFromCenter));
   float sparkShape = body * 0.78 + halo * 0.2;
-  float shape = mix(sparkShape, mistShape * 0.58, vSoftness);
+  float surfaceSoftness = max(vSoftness, uLightSurface * 0.2);
+  float shape = mix(sparkShape, mistShape * 0.58, surfaceSoftness);
   shape = mix(shape, streakShape * 0.84 + halo * 0.08, vStreak);
-  float alpha = shape * vAlpha * mix(1.0, 0.42, vSoftness);
+  float alpha = shape * vAlpha * mix(1.0, 0.42, surfaceSoftness);
+  alpha *= mix(1.0, 0.82, uLightSurface);
 
   vec3 blueFamily = mix(uDeep, uBlue, smoothstep(0.0, 0.46, vTone));
   vec3 spectralFamily = mix(
@@ -552,7 +620,8 @@ void main() {
   );
   base *= 0.98 + vTwinkle * 0.24;
 
-  gl_FragColor = vec4(base * alpha, alpha);
+  vec3 outputColor = mix(base * alpha, base, uLightSurface);
+  gl_FragColor = vec4(outputColor, alpha);
 }
 `;
 
@@ -569,6 +638,7 @@ const seededRandom = (seed: number) => {
 
 interface ParticleFieldProps {
   color: string;
+  lightSurface: boolean;
   count: number;
   cycleDuration: number;
   paused: boolean;
@@ -577,6 +647,7 @@ interface ParticleFieldProps {
 
 function ParticleField({
   color,
+  lightSurface,
   count,
   cycleDuration,
   paused,
@@ -655,7 +726,8 @@ function ParticleField({
     uCyan: { value: new THREE.Color("#6ce8ff") },
     uViolet: { value: new THREE.Color("#b9a7ff") },
     uIce: { value: new THREE.Color("#e8fbff") },
-  }), [color, cycleDuration]);
+    uLightSurface: { value: lightSurface ? 1 : 0 },
+  }), [color, cycleDuration, lightSurface]);
 
   useEffect(() => {
     elapsedRef.current = 0;
@@ -667,12 +739,21 @@ function ParticleField({
     const material = materialRef.current;
     if (!material) return;
     const main = new THREE.Color(color);
-    material.uniforms.uBlue.value.copy(main);
-    material.uniforms.uDeep.value.copy(main).offsetHSL(-0.035, 0.07, -0.16);
-    material.uniforms.uCyan.value.copy(main).offsetHSL(-0.075, -0.08, 0.13);
-    material.uniforms.uViolet.value.copy(main).offsetHSL(0.11, -0.08, 0.18);
-    material.uniforms.uIce.value.copy(main).lerp(new THREE.Color("#ffffff"), 0.72);
-  }, [color]);
+    if (lightSurface) {
+      material.uniforms.uBlue.value.copy(main).lerp(new THREE.Color("#eaf8ff"), 0.16);
+      material.uniforms.uDeep.value.copy(main).lerp(new THREE.Color("#8accea"), 0.48);
+      material.uniforms.uCyan.value.copy(main).lerp(new THREE.Color("#c9f5f4"), 0.62);
+      material.uniforms.uViolet.value.copy(main).lerp(new THREE.Color("#d8d7f4"), 0.7);
+      material.uniforms.uIce.value.set("#f6fcff");
+    } else {
+      material.uniforms.uBlue.value.copy(main);
+      material.uniforms.uDeep.value.copy(main).offsetHSL(-0.035, 0.07, -0.16);
+      material.uniforms.uCyan.value.copy(main).offsetHSL(-0.075, -0.08, 0.13);
+      material.uniforms.uViolet.value.copy(main).offsetHSL(0.11, -0.08, 0.18);
+      material.uniforms.uIce.value.copy(main).lerp(new THREE.Color("#ffffff"), 0.72);
+    }
+    material.uniforms.uLightSurface.value = lightSurface ? 1 : 0;
+  }, [color, lightSurface]);
 
   useFrame((_, delta) => {
     const material = materialRef.current;
@@ -698,7 +779,7 @@ function ParticleField({
         transparent
         depthWrite={false}
         depthTest={false}
-        blending={THREE.AdditiveBlending}
+        blending={lightSurface ? THREE.NormalBlending : THREE.AdditiveBlending}
         toneMapped={false}
       />
     </points>
@@ -707,6 +788,8 @@ function ParticleField({
 
 export default function BlueBloomFirework({
   color = "#58b7ff",
+  backgroundColor,
+  lightSurface = false,
   particleCount = 32000,
   cycleDuration = 6,
   paused = false,
@@ -726,8 +809,10 @@ export default function BlueBloomFirework({
         }}
         onCreated={({ gl }) => onCanvasReady?.(gl.domElement)}
       >
+        {backgroundColor ? <color attach="background" args={[backgroundColor]} /> : null}
         <ParticleField
           color={color}
+          lightSurface={lightSurface}
           count={particleCount}
           cycleDuration={cycleDuration}
           paused={paused}
