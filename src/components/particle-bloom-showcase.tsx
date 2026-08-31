@@ -147,7 +147,7 @@ export default function ParticleBloomShowcase() {
       <header className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-5 p-5 sm:p-8">
         <div>
           <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-[#165c83]/55 sm:text-[10px]">
-            GPU organic study · continuous interpolation · 120 FPS export
+            Optical motion study · 780 frames · native 120 FPS
           </p>
           <h1 className="mt-2 text-lg font-medium tracking-[-0.035em] sm:text-xl">
             Lensborne blue bloom

@@ -20,6 +20,7 @@ const SPRITE_ROWS = 8;
 const FRAME_COUNT = SPRITE_COLUMNS * SPRITE_ROWS;
 const INTERPOLATED_STEPS = 6;
 const SPRITE_SOURCE = "/organic-bloom-sprite-v2-96f.png";
+const OPTICAL_VIDEO_SOURCE = "/organic-bloom-loop-optical-120.webm";
 
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
 
@@ -121,6 +122,7 @@ export default function BlueBloomFirework({
   const elapsedRef = useRef(0);
   const lastTimestampRef = useRef<number | null>(null);
   const onCanvasReadyRef = useRef(onCanvasReady);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
     onCanvasReadyRef.current = onCanvasReady;
@@ -129,7 +131,12 @@ export default function BlueBloomFirework({
   useEffect(() => {
     elapsedRef.current = 0;
     lastTimestampRef.current = null;
-  }, [restartSignal]);
+    const video = videoRef.current;
+    if (video) {
+      video.currentTime = 0;
+      if (!paused) void video.play().catch(() => undefined);
+    }
+  }, [paused, restartSignal]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -139,8 +146,23 @@ export default function BlueBloomFirework({
 
     const image = new Image();
     image.decoding = "async";
+    const video = document.createElement("video");
+    video.muted = true;
+    video.loop = true;
+    video.playsInline = true;
+    video.preload = "auto";
+    video.disablePictureInPicture = true;
+    videoRef.current = video;
     let animationFrame = 0;
     let mounted = true;
+    let videoReady = false;
+    let canvasAnnounced = false;
+
+    const announceCanvas = () => {
+      if (canvasAnnounced) return;
+      canvasAnnounced = true;
+      onCanvasReadyRef.current?.(canvas);
+    };
 
     const render = (timestamp: number) => {
       if (!mounted) return;
@@ -163,7 +185,7 @@ export default function BlueBloomFirework({
         canvas.height = targetHeight;
       }
 
-      if (!paused && lastTimestampRef.current !== null) {
+      if (!paused && !videoReady && lastTimestampRef.current !== null) {
         elapsedRef.current += Math.min(
           (timestamp - lastTimestampRef.current) / 1_000,
           0.05,
@@ -175,7 +197,16 @@ export default function BlueBloomFirework({
       context.imageSmoothingEnabled = true;
       context.imageSmoothingQuality = "high";
 
-      if (image.complete && image.naturalWidth > 0) {
+      if (videoReady && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        const videoSize = Math.min(canvas.width, canvas.height);
+        context.drawImage(
+          video,
+          (canvas.width - videoSize) * 0.5,
+          (canvas.height - videoSize) * 0.5,
+          videoSize,
+          videoSize,
+        );
+      } else if (image.complete && image.naturalWidth > 0) {
         const phase = paused
           ? 0.56
           : (elapsedRef.current % cycleDuration) / cycleDuration;
@@ -235,14 +266,31 @@ export default function BlueBloomFirework({
     };
 
     image.addEventListener("load", () => {
-      onCanvasReadyRef.current?.(canvas);
-      animationFrame = window.requestAnimationFrame(render);
+      announceCanvas();
     }, { once: true });
     image.src = SPRITE_SOURCE;
+
+    video.addEventListener("loadeddata", () => {
+      if (!mounted) return;
+      videoReady = true;
+      video.currentTime = paused ? video.duration * 0.56 : 0;
+      if (!paused) void video.play().catch(() => undefined);
+      announceCanvas();
+    }, { once: true });
+    video.addEventListener("error", () => {
+      videoReady = false;
+    });
+    video.src = OPTICAL_VIDEO_SOURCE;
+    video.load();
+    animationFrame = window.requestAnimationFrame(render);
 
     return () => {
       mounted = false;
       window.cancelAnimationFrame(animationFrame);
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+      if (videoRef.current === video) videoRef.current = null;
     };
   }, [backgroundColor, color, cycleDuration, paused]);
 
