@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   // Without this, Next can serve the HTML while blocking dev-only client requests,
   // leaving the preview visible but not interactive.
   allowedDevOrigins: [
+    "192.168.31.102",
     "*.lhr.life",
     "*.localhost.run",
     "*.serveousercontent.com",
